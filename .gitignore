@@ -1,0 +1,4 @@
+*.class
+tests/build/
+application.*/
+.DS_Store
