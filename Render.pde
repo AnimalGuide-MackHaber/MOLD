@@ -150,7 +150,7 @@ void drawSidebarGUI(float x, float y, float w, float h) {
   text("PHYSARUM BIO-SONIC ENGINE", x + 12, y + 10);
   fill(161, 161, 170);
   textSize(10);
-  text("FPS: " + round(frameRate) + "  |  POP: " + nf(activeAgentCount / 1000.0f, 1, 1) + "k  |  OATS: " + foodNodes.size(), x + 12, y + 26);
+  text("FPS: " + round(frameRate) + "  |  POP: " + activeAgentCount + "  |  OATS: " + foodNodes.size(), x + 12, y + 26);
   String midiStatus;
   if (!midiHandler.isReady()) midiStatus = "NO OUTPUT PORT";
   else midiStatus = midiEnabled ? (midiHandler.inputIsMidimix ? "MIDIMIX LINKED" : "PROGRAMMER MODE") : "LIVE MODE (LINK OFF)";
