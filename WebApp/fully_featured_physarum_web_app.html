@@ -94,9 +94,9 @@
       
       <div class="flex justify-between items-center mt-3 mb-1 text-xs">
         <label for="slider-agents" class="font-bold text-neutral-200 uppercase tracking-wide">Target Agent Count</label>
-        <span id="lbl-agents" class="font-mono text-cyan-400 font-semibold">8000</span>
+        <span id="lbl-agents" class="font-mono text-cyan-400 font-semibold">16000</span>
       </div>
-      <input id="slider-agents" type="range" min="1000" max="64000" step="100" value="8000" class="w-full h-1.5 bg-neutral-800 rounded cursor-pointer">
+      <input id="slider-agents" type="range" min="1000" max="64000" step="100" value="16000" class="w-full h-1.5 bg-neutral-800 rounded cursor-pointer">
     </div>
 
     <!-- Accordion Sections (All collapsed on initialize) -->
@@ -131,10 +131,39 @@
               <option value="">(Select Output Device)</option>
             </select>
           </div>
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Launchpad LED Sensitivity</span>
+              <span id="lbl-led-thresh" class="font-mono text-cyan-400">120</span>
+            </div>
+            <input id="slider-led-thresh" type="range" min="20" max="1000" step="10" value="120" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Ripple Width (Launchpad)</span>
+              <span id="lbl-ripple-width" class="font-mono text-cyan-400">3.0 px</span>
+            </div>
+            <input id="slider-ripple-width" type="range" min="1.0" max="5.0" step="0.5" value="3.0" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+          <div class="pt-1 border-t border-neutral-800">
+            <span class="block text-[11px] text-neutral-400 mb-1">Launchpad LED Display Layers</span>
+            <div class="grid grid-cols-3 gap-1">
+              <button id="btn-lp-slime" class="py-1 rounded bg-yellow-950 text-yellow-300 border border-yellow-700 font-mono text-[10px] transition-colors">MOLD ON</button>
+              <button id="btn-lp-food" class="py-1 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 font-mono text-[10px] transition-colors">FOOD OFF</button>
+              <button id="btn-lp-eat" class="py-1 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 font-mono text-[10px] transition-colors">EAT OFF</button>
+            </div>
+          </div>
+          <div class="pt-1">
+            <span class="block text-[11px] text-neutral-400 mb-1">Launchpad Mode & Protocol</span>
+            <div class="grid grid-cols-2 gap-1">
+              <button id="btn-lp-usermode" class="py-1 rounded bg-cyan-950 text-cyan-300 border border-cyan-700 font-mono text-[10px] transition-colors">USER MODE</button>
+              <button id="btn-lp-rgb" class="py-1 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 font-mono text-[10px] transition-colors">PALETTE LED</button>
+            </div>
+          </div>
+          <button id="btn-rescan-midi" class="w-full py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold border border-neutral-700 text-[11px] transition-colors">Rescan MIDI Ports</button>
           <div class="text-[11px] text-neutral-400 space-y-1 bg-neutral-950 p-2 rounded border border-neutral-800">
-            <p><strong>Launchpad (11–88):</strong> Drop oats. <strong>MIDImix:</strong> Faders/knobs control params.</p>
-            <p><strong>Amber/Yellow LEDs:</strong> Proportional to remaining food mass.</p>
-            <p><strong>Green/Cyan LEDs:</strong> Live heatmap of slime biomass.</p>
+            <p><strong>Launchpad:</strong> Pads (36..99 / 11..88) drop oats. CC 89 = Re-inoculate, CC 79 = Clear Food, CC 39/29/19 = Toggle LED Layers.</p>
+            <p><strong>MIDImix:</strong> Faders 1-8 (DSP/Reverb), Master (Speed), Knobs (Bioenergetics), Mute (Toggles), Rec Arm (Actions).</p>
           </div>
         </div>
       </section>
@@ -216,16 +245,16 @@
           <div class="pt-2">
             <div class="flex justify-between items-center mb-1">
               <span class="text-neutral-400">LPF Cutoff Sensitivity (Food Size)</span>
-              <span id="lbl-lpf-sens" class="font-mono text-cyan-400">1.2x</span>
+              <span id="lbl-lpf-sens" class="font-mono text-cyan-400">3.0x</span>
             </div>
-            <input id="slider-lpf-sens" type="range" min="0.2" max="3.0" step="0.1" value="1.2" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+            <input id="slider-lpf-sens" type="range" min="0.2" max="3.0" step="0.1" value="3.0" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
           </div>
           <div>
             <div class="flex justify-between items-center mb-1">
               <span class="text-neutral-400">Filter Resonance (Q)</span>
-              <span id="lbl-lpf-q" class="font-mono text-cyan-400">4.5</span>
+              <span id="lbl-lpf-q" class="font-mono text-cyan-400">18.0</span>
             </div>
-            <input id="slider-lpf-q" type="range" min="0.5" max="18.0" step="0.5" value="4.5" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+            <input id="slider-lpf-q" type="range" min="0.5" max="18.0" step="0.5" value="18.0" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
           </div>
           <div>
             <div class="flex justify-between items-center mb-1">
@@ -255,6 +284,13 @@
           <div class="flex items-center justify-between">
             <label for="chk-biomod-active" class="text-neutral-300">Bio-Modulation</label>
             <input type="checkbox" id="chk-biomod-active" class="w-4 h-4 rounded bg-neutral-800 border-neutral-700" checked>
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Mold Bio-Mod Depth</span>
+              <span id="lbl-biomod-depth" class="font-mono text-cyan-400">2.0x</span>
+            </div>
+            <input id="slider-biomod-depth" type="range" min="0.0" max="4.0" step="0.1" value="2.0" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
           </div>
           <div class="pt-2">
             <div class="flex justify-between items-center mb-1">
@@ -396,27 +432,43 @@
       bmr: 0.010,
       locomotionCost: 0.018,
       mitosisThreshold: 75.0,
-      maxAgents: 32000,
-      initialAgents: 8000,
-      targetAgentCount: 8000,
+      maxAgents: 64000,
+      initialAgents: 16000,
+      targetAgentCount: 16000,
       octaveShift: 0,
       visualBlur: 0.0,
+      baseReverbWet: 0.50,
+      baseReverbDry: 0.80,
+      baseReverbT60: 3.5,
+      baseReverbHighDamping: 0.45,
+      baseReverbPreDelay: 0.015,
       reverbWet: 0.50,
       reverbDry: 0.80,
       reverbT60: 3.5,
       reverbHighDamping: 0.45,
       reverbPreDelay: 0.015,
+      reverbBioModDepth: 2.0, // Default 2.0x is 2x pronounced bio-modulation
       reverbEnabled: true,
       autoModulateReverb: true,
+      reverbSeed: 1337,
+      lastMitosisBiomassThreshold: 8000.0,
       visualSharpness: 0.0,
-      lpfSens: 1.2,
-      lpfQ: 4.5,
+      lpfSens: 3.0, // Default to maximum on startup
+      lpfQ: 18.0,  // Default to maximum on startup
       vcaSens: 1.0,
+      vcaGateThreshold: 120.0,
       rootNote: 9, // 'A'
       scaleType: 'major_pentatonic',
       waveform: 'triangle',
       showGridOverlay: false,
-      palette: 'yellow'
+      palette: 'yellow',
+      ledMassThreshold: 120.0,
+      lpRippleWidth: 3.0,
+      lpShowSlime: true,
+      lpShowFood: false,
+      lpShowEating: false,
+      lpUserMode: true,
+      lpUseRgbSysex: false
     };
 
     let agents = [];
@@ -434,7 +486,62 @@
     let midiOut = null;
     let midiEnabled = false;
     let padDirtyBuffer = new Uint8Array(64).fill(255);
+    let padDirtyChannels = new Int8Array(64).fill(-1);
+    let lastSentPadR = new Int8Array(64).fill(-1);
+    let lastSentPadG = new Int8Array(64).fill(-1);
+    let lastSentPadB = new Int8Array(64).fill(-1);
+    let currentPadR = new Float32Array(64);
+    let currentPadG = new Float32Array(64);
+    let currentPadB = new Float32Array(64);
+    let smoothBiomass = new Float32Array(64);
+    let smoothFoodRatio = new Float32Array(64);
     let lastMidiFlushTime = 0;
+    let padRipples = [];
+    let lpTopSidePressed = false;
+    let lpSecSidePressed = false;
+
+    // Launchpad Drum Rack (4-Quadrant) 36..99 mapping
+    function getLaunchpadUserNote(col, row) {
+      const quadX = Math.floor(col / 4);
+      const quadY = Math.floor(row / 4);
+      const subX = col % 4;
+      const subY = 3 - (row % 4);
+      let baseNote = 36;
+      if (quadX === 0 && quadY === 1) baseNote = 36;      // Q1 (Bottom-Left)
+      else if (quadX === 0 && quadY === 0) baseNote = 52; // Q3 (Top-Left)
+      else if (quadX === 1 && quadY === 1) baseNote = 68; // Q2 (Bottom-Right)
+      else baseNote = 84;                               // Q4 (Top-Right)
+      return baseNote + (subY * 4) + subX;
+    }
+
+    function decodeLaunchpadUserNote(note) {
+      const index = note - 36;
+      const quad = Math.floor(index / 16);
+      const sub = index % 16;
+      const subRow = Math.floor(sub / 4);
+      const subCol = sub % 4;
+      const col = (quad >= 2 ? 4 : 0) + subCol;
+      const row = (quad % 2 === 0 ? 7 : 3) - subRow;
+      return [col, row];
+    }
+
+    function triggerPadRipple(col, row) {
+      padRipples.push({
+        originCol: col,
+        originRow: row,
+        birthTime: performance.now(),
+        durationMs: 900.0,
+        maxRadius: 11.5
+      });
+    }
+
+    function resetPadDirtyCaches() {
+      padDirtyBuffer.fill(255);
+      padDirtyChannels.fill(-1);
+      lastSentPadR.fill(-1);
+      lastSentPadG.fill(-1);
+      lastSentPadB.fill(-1);
+    }
 
     // --- STREAMING_CHUNK:Implementing Music Theory matrices and frequencies ---
     const SCALE_INTERVALS = {
@@ -469,33 +576,76 @@
     }
 
     // --- STREAMING_CHUNK:Building Voice, VCA, and Filter DSP logic for Food Nodes ---
+    // Food Audio Voice: True 3D Binaural Spatialization, Pinna Spectral Notch & Head Shadow Filter
     class FoodAudioVoice {
       constructor(food) {
         this.food = food;
         if (!audioCtx) return;
 
-        // Signal Chain: Osc -> LPF -> Gate (Feeding) -> VCA (Adjacent Mass) -> Master
+        // Signal Chain:
+        // Osc -> Pinna Notch (Elevation) -> Front/Back HighShelf (Shadow) -> Dual L/R LowPass (Head Tilt) -> Dual Delays (ITD) -> Voice Gains -> Mixer Split
         this.osc = audioCtx.createOscillator();
-        this.filter = audioCtx.createBiquadFilter();
-        this.gate = audioCtx.createGain();
-        this.vca = audioCtx.createGain();
+        this.pinnaNotch = audioCtx.createBiquadFilter();
+        this.frontBackShelf = audioCtx.createBiquadFilter();
+
+        this.filterL = audioCtx.createBiquadFilter();
+        this.filterR = audioCtx.createBiquadFilter();
+
+        this.delayL = audioCtx.createDelay(0.005);
+        this.delayR = audioCtx.createDelay(0.005);
+
+        this.gainL = audioCtx.createGain();
+        this.gainR = audioCtx.createGain();
+
+        this.merger = audioCtx.createChannelMerger(2);
 
         this.osc.type = CONFIG.waveform;
         this.osc.frequency.setValueAtTime(getCellFrequency(food.gridCol, food.gridRow), audioCtx.currentTime);
 
-        this.filter.type = 'lowpass';
-        this.filter.Q.setValueAtTime(CONFIG.lpfQ, audioCtx.currentTime);
-        this.filter.frequency.setValueAtTime(80, audioCtx.currentTime);
+        // Pinna Notch (Z-Elevation): Peaking / Notch filter sweeping 6.2kHz - 9.2kHz
+        this.pinnaNotch.type = 'peaking';
+        this.pinnaNotch.frequency.setValueAtTime(6200, audioCtx.currentTime);
+        this.pinnaNotch.Q.setValueAtTime(2.5, audioCtx.currentTime);
+        this.pinnaNotch.gain.setValueAtTime(-4.0, audioCtx.currentTime);
 
-        this.gate.gain.setValueAtTime(0.0, audioCtx.currentTime);
-        this.vca.gain.setValueAtTime(0.0, audioCtx.currentTime);
+        // Front vs Back Pinna High-Shelf (4.0kHz)
+        this.frontBackShelf.type = 'highshelf';
+        this.frontBackShelf.frequency.setValueAtTime(4000, audioCtx.currentTime);
+        this.frontBackShelf.gain.setValueAtTime(0.0, audioCtx.currentTime);
 
-        this.osc.connect(this.filter);
-        this.filter.connect(this.gate);
-        this.gate.connect(this.vca);
-        this.vca.connect(reverbDryGain);
-      if (reverbConvolver) this.vca.connect(reverbConvolver);
-        
+        // L/R LowPass filters
+        this.filterL.type = 'lowpass';
+        this.filterR.type = 'lowpass';
+        this.filterL.Q.setValueAtTime(CONFIG.lpfQ, audioCtx.currentTime);
+        this.filterR.Q.setValueAtTime(CONFIG.lpfQ, audioCtx.currentTime);
+        this.filterL.frequency.setValueAtTime(80, audioCtx.currentTime);
+        this.filterR.frequency.setValueAtTime(80, audioCtx.currentTime);
+
+        this.delayL.delayTime.setValueAtTime(0.0, audioCtx.currentTime);
+        this.delayR.delayTime.setValueAtTime(0.0, audioCtx.currentTime);
+
+        this.gainL.gain.setValueAtTime(0.0, audioCtx.currentTime);
+        this.gainR.gain.setValueAtTime(0.0, audioCtx.currentTime);
+
+        // Wire graph:
+        this.osc.connect(this.pinnaNotch);
+        this.pinnaNotch.connect(this.frontBackShelf);
+
+        this.frontBackShelf.connect(this.filterL);
+        this.frontBackShelf.connect(this.filterR);
+
+        this.filterL.connect(this.delayL);
+        this.filterR.connect(this.delayR);
+
+        this.delayL.connect(this.gainL);
+        this.delayR.connect(this.gainR);
+
+        this.gainL.connect(this.merger, 0, 0); // Merges into Left (ch 0)
+        this.gainR.connect(this.merger, 0, 1); // Merges into Right (ch 1)
+
+        if (reverbDryGain) this.merger.connect(reverbDryGain);
+        if (reverbConvolver) this.merger.connect(reverbConvolver);
+
         try { this.osc.start(); } catch(e) {}
       }
 
@@ -503,31 +653,89 @@
         if (!audioCtx || !this.osc) return;
         const now = audioCtx.currentTime;
 
-        // Dynamic Filter: Sweeps down as food is consumed
+        // 1. Normalized Cartesian 3D coordinates relative to center (worldDim/2)
+        const halfDim = CONFIG.worldDim * 0.5;
+        const dx = Math.min(1.0, Math.max(-1.0, (this.food.x - halfDim) / halfDim));
+        const dy = Math.min(1.0, Math.max(-1.0, (halfDim - this.food.y) / halfDim));
+
+        // 2. Lateral Pan with shaped curve (dx^1.35) and Constant-Power Law
+        const sign = (dx < 0.0) ? -1.0 : 1.0;
+        const bShaped = sign * Math.pow(Math.abs(dx), 1.35);
+        const panNorm = Math.min(1.0, Math.max(0.0, 0.5 + 0.5 * bShaped));
+        const panAngle = panNorm * (Math.PI * 0.5);
+        const panL = Math.cos(panAngle);
+        const panR = Math.sin(panAngle);
+
+        // Distance attenuation
+        const distNorm = Math.sqrt(dx * dx + dy * dy);
+        const distGain = 1.0 / (1.0 + distNorm * 0.25);
+
+        // Multi-voice headroom scale: 0.24 / sqrt(max(1, 0.75 * N))
+        const activeCount = Math.max(1, foodSources.length);
+        const voiceHeadroom = 0.24 / Math.sqrt(Math.max(1.0, activeCount * 0.75));
+
+        // 3. Dynamic Filter Cutoff: sweeps down as food is consumed
         const massRatio = Math.max(0.0, this.food.mass / this.food.initialMass);
-        const targetCutoff = 80 + (massRatio * 2800 * CONFIG.lpfSens);
-        this.filter.frequency.setTargetAtTime(targetCutoff, now, 0.05);
-        this.filter.Q.setTargetAtTime(CONFIG.lpfQ, now, 0.05);
+        const baseCutoff = 80.0 + (massRatio * 3120.0 * (CONFIG.lpfSens / 3.0));
+        const cutoffL = Math.min(18000.0, Math.max(40.0, baseCutoff * (1.0 - dx * 0.18)));
+        const cutoffR = Math.min(18000.0, Math.max(40.0, baseCutoff * (1.0 + dx * 0.18)));
 
-        // Gate: Opens when agent is actively biting
-        this.gate.gain.setTargetAtTime(isFeeding ? 0.35 : 0.0, now, 0.08);
+        this.filterL.frequency.setTargetAtTime(cutoffL, now, 0.04);
+        this.filterR.frequency.setTargetAtTime(cutoffR, now, 0.04);
+        this.filterL.Q.setTargetAtTime(CONFIG.lpfQ, now, 0.04);
+        this.filterR.Q.setTargetAtTime(CONFIG.lpfQ, now, 0.04);
 
-        // VCA: Modulated by total slime mass in the 8 adjacent cells
-        const vcaLevel = Math.min(adjacentMass * CONFIG.vcaSens, 1.0);
-        this.vca.gain.setTargetAtTime(vcaLevel, now, 0.08);
+        // 4. Pinna Front/Back Shadowing (+1.5dB front, -4.5dB rear)
+        const fbGainDb = (dy >= 0.0) ? (dy * 1.5) : (dy * 4.5);
+        this.frontBackShelf.gain.setTargetAtTime(fbGainDb, now, 0.05);
+
+        // 5. 3D Biomass Elevation notch filter (6.2kHz - 9.2kHz, -4dB -> -8dB)
+        const targetElev = Math.min(1.0, Math.max(0.0, adjacentMass / 800.0));
+        this.food.elevationNorm += (targetElev - this.food.elevationNorm) * 0.12;
+        const notchFreq = 6200.0 + this.food.elevationNorm * 3000.0;
+        const notchDepthDb = -4.0 - this.food.elevationNorm * 4.0;
+        this.pinnaNotch.frequency.setTargetAtTime(notchFreq, now, 0.05);
+        this.pinnaNotch.gain.setTargetAtTime(notchDepthDb, now, 0.05);
+
+        // 6. Haas Micro-Delay (ITD up to 18 samples @ 44.1kHz = ~0.4ms)
+        const sr = audioCtx.sampleRate || 44100;
+        const itdDelaySec = (Math.abs(bShaped) * 18.0) / sr;
+        if (bShaped < 0.0) {
+          // Source on left -> right ear is delayed
+          this.delayL.delayTime.setTargetAtTime(0.0, now, 0.02);
+          this.delayR.delayTime.setTargetAtTime(itdDelaySec, now, 0.02);
+        } else {
+          // Source on right -> left ear is delayed
+          this.delayL.delayTime.setTargetAtTime(itdDelaySec, now, 0.02);
+          this.delayR.delayTime.setTargetAtTime(0.0, now, 0.02);
+        }
+
+        // 7. VCA Modulation: Moore neighborhood drive with tanh saturation
+        const effectiveMass = Math.max(0.0, adjacentMass - (CONFIG.vcaGateThreshold || 120.0));
+        const drive = (effectiveMass * CONFIG.vcaSens * 1.25) / 1000.0;
+        const targetVca = isFeeding ? Math.tanh(drive) : 0.0;
+        this.food.vcaGain += (targetVca - this.food.vcaGain) * 0.15;
+
+        const targetActivity = isFeeding ? 1.0 : 0.0;
+        this.food.consumptionActivity += (targetActivity - this.food.consumptionActivity) * 0.12;
+
+        const voiceGainTotal = this.food.vcaGain * voiceHeadroom * distGain;
+        this.gainL.gain.setTargetAtTime(voiceGainTotal * panL, now, 0.04);
+        this.gainR.gain.setTargetAtTime(voiceGainTotal * panR, now, 0.04);
       }
 
       destroy() {
         if (!audioCtx || !this.osc) return;
         const now = audioCtx.currentTime;
         try {
-          this.vca.gain.setTargetAtTime(0, now, 0.04);
+          this.gainL.gain.setTargetAtTime(0, now, 0.04);
+          this.gainR.gain.setTargetAtTime(0, now, 0.04);
           setTimeout(() => {
-            if(this.osc) {
-                this.osc.stop();
-                this.osc.disconnect();
+            if (this.osc) {
+              this.osc.stop();
+              this.osc.disconnect();
             }
-          }, 50);
+          }, 60);
         } catch (e) {}
       }
     }
@@ -542,6 +750,9 @@
         this.gridCol = Math.floor((this.x / CONFIG.worldDim) * CONFIG.gridDim);
         this.gridRow = Math.floor((this.y / CONFIG.worldDim) * CONFIG.gridDim);
         this.isFeeding = false;
+        this.elevationNorm = 0.0;
+        this.vcaGain = 0.0;
+        this.consumptionActivity = 0.0;
         this.voice = new FoodAudioVoice(this);
       }
 
@@ -900,6 +1111,17 @@
           p.circle(sx, sy, radMax * 2);
           p.drawingContext.setLineDash([]);
 
+          // 3D Biomass Elevation Ring (lifts visually with mold mass height)
+          if (food.elevationNorm > 0.02) {
+            p.push();
+            p.noFill();
+            p.stroke(6, 182, 212, 70 + 120 * food.elevationNorm);
+            p.strokeWeight(1.2);
+            const elevOffset = food.elevationNorm * 10.0 * (p.height / CONFIG.worldDim);
+            p.ellipse(sx, sy - elevOffset, (radMax + 4) * 2, (radMax + 2) * 2);
+            p.pop();
+          }
+
           // Inner solid shrinking core
           const radCore = (p.width / 800) * (4 + (massRatio ** 0.65) * 12);
           p.fill(255, 230, 120);
@@ -937,6 +1159,31 @@
               p.text(`${hz}Hz`, c * cellPx + cellPx / 2, r * cellPx + cellPx / 2);
             }
           }
+
+          // 3D Binaural Virtual Listener (Center of grid)
+          const lx = p.width * 0.5;
+          const ly = p.height * 0.5;
+          p.push();
+          p.noFill();
+          p.stroke(6, 182, 212, 180); // Cyan
+          p.strokeWeight(1.5);
+          p.circle(lx, ly, 16);
+          // Nose pointing forward (up towards rows 0-3)
+          p.fill(6, 182, 212, 200);
+          p.noStroke();
+          p.triangle(lx - 3, ly - 7, lx + 3, ly - 7, lx, ly - 12);
+          // Left and Right Ears
+          p.stroke(6, 182, 212, 220);
+          p.strokeWeight(2);
+          p.line(lx - 9, ly - 3, lx - 9, ly + 3);
+          p.line(lx + 9, ly - 3, lx + 9, ly + 3);
+          // Orientation label
+          p.noStroke();
+          p.textAlign(p.CENTER, p.TOP);
+          p.textSize(8);
+          p.fill(6, 182, 212, 160);
+          p.text("LISTENER (3D)", lx, ly + 11);
+          p.pop();
         }
 
         // Top UI Updates
@@ -945,6 +1192,7 @@
           document.getElementById('agent-display').innerText = `Agents: ${agents.length}`;
         }
 
+        updateReverbBioTelemetry();
         flushMidiLeds();
       };
 
@@ -956,7 +1204,10 @@
           }
           const simX = (p.mouseX / p.width) * CONFIG.worldDim;
           const simY = (p.mouseY / p.height) * CONFIG.worldDim;
+          const col = Math.floor((simX / CONFIG.worldDim) * CONFIG.gridDim);
+          const row = Math.floor((simY / CONFIG.worldDim) * CONFIG.gridDim);
           foodSources.push(new FoodNodule(simX, simY));
+          triggerPadRipple(col, row);
         }
       };
     });
@@ -968,6 +1219,7 @@
       const x = col * cellW + jX;
       const y = row * cellW + jY;
       foodSources.push(new FoodNodule(x, y));
+      triggerPadRipple(col, row);
     }
 
     // --- STREAMING_CHUNK:Connecting Web MIDI SysEx and bidirectional LED heatmap ---
@@ -1032,6 +1284,7 @@
             midiOut.send([0xF0, 0x00, 0x20, 0x29, 0x02, 0x0D, 0x0E, 0x01, 0xF7]);
             document.getElementById('midi-status').innerText = 'LP MK3 ON';
             document.getElementById('midi-status').className = 'px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-900/60 text-cyan-300';
+            syncLpSideLeds();
         } catch(e) {}
       }
     }
@@ -1044,17 +1297,85 @@
       if (isMidimix) {
         handleMidimix(status, data1, data2);
       } else {
-        // Launchpad
-        if ((status & 0xF0) === 0x90 && data2 > 0) {
-          const r10 = Math.floor(data1 / 10);
-          const c10 = data1 % 10;
-          if (r10 >= 1 && r10 <= 8 && c10 >= 1 && c10 <= 8) {
-            const row = 8 - r10;
-            const col = c10 - 1;
+        // Launchpad handling (Notes & Perimeter CC side buttons)
+        const cmd = status & 0xF0;
+        if (cmd === 0x90 && data2 > 0) {
+          let row = -1;
+          let col = -1;
+
+          // Auto-detect Programmer vs User Mode
+          if (data1 >= 11 && data1 < 36) {
+            CONFIG.lpUserMode = false;
+          } else if (data1 > 88 && data1 <= 99) {
+            CONFIG.lpUserMode = true;
+          } else if (data1 >= 36 && data1 <= 88) {
+            const c10 = data1 % 10;
+            if (c10 === 9 || c10 === 0) CONFIG.lpUserMode = true;
+          }
+
+          if (CONFIG.lpUserMode) {
+            if (data1 >= 36 && data1 <= 99) {
+              const cr = decodeLaunchpadUserNote(data1);
+              col = cr[0];
+              row = cr[1];
+            }
+          } else {
+            const r10 = Math.floor(data1 / 10);
+            const c10 = data1 % 10;
+            if (r10 >= 1 && r10 <= 8 && c10 >= 1 && c10 <= 8) {
+              row = 8 - r10;
+              col = c10 - 1;
+            }
+          }
+
+          if (row >= 0 && row < 8 && col >= 0 && col < 8) {
             spawnNoduleInGrid(col, row);
+          }
+        } else if (cmd === 0xB0) {
+          // Launchpad side buttons (Scene Launch column: CC 89, 79, 39, 29, 19)
+          if (data2 > 0) {
+            if (data1 === 89) {
+              lpTopSidePressed = true;
+              document.getElementById('btn-reinoculate').click();
+              sendLpCc(1, 89, 13); // Flash brilliant yellow
+            } else if (data1 === 79) {
+              lpSecSidePressed = true;
+              document.getElementById('btn-clear-food').click();
+              sendLpCc(1, 79, 5); // Flash brilliant red
+            } else if (data1 === 39) {
+              document.getElementById('btn-lp-slime').click();
+            } else if (data1 === 29) {
+              document.getElementById('btn-lp-food').click();
+            } else if (data1 === 19) {
+              document.getElementById('btn-lp-eat').click();
+            }
+          } else {
+            if (data1 === 89) {
+              lpTopSidePressed = false;
+              sendLpCc(1, 89, 15);
+            } else if (data1 === 79) {
+              lpSecSidePressed = false;
+              sendLpCc(1, 79, 7);
+            }
           }
         }
       }
+    }
+
+    function sendLpCc(channel, cc, val) {
+      if (!midiOut || !midiEnabled) return;
+      try {
+        midiOut.send([0xB0 | ((channel - 1) & 0x0F), cc, val & 0x7F]);
+      } catch(e) {}
+    }
+
+    function syncLpSideLeds() {
+      if (!midiOut || !midiEnabled) return;
+      sendLpCc(1, 89, lpTopSidePressed ? 13 : 15);
+      sendLpCc(1, 79, lpSecSidePressed ? 5 : 7);
+      sendLpCc(1, 39, CONFIG.lpShowSlime ? 13 : 0);
+      sendLpCc(1, 29, CONFIG.lpShowFood ? 37 : 0);
+      sendLpCc(1, 19, CONFIG.lpShowEating ? 53 : 0);
     }
 
     function setSliderVal(id, minVal, maxVal, normVal, formatCb) {
@@ -1111,6 +1432,89 @@
         
         else if (d1 === 17) setSliderVal('slider-sharpness', 0.0, 1.0, val);
         else if (d1 === 21) setSliderVal('slider-agents', 1000, 64000, val);
+        else if (d1 === 25) setSliderVal('slider-visual-blur', 0.0, 8.0, val);
+
+        else if (d1 === 18) {
+          const octIdx = Math.round(val * 2.0) - 1; // -1, 0, +1
+          const sel = document.getElementById('sel-octave-shift');
+          if (sel && parseInt(sel.value, 10) !== octIdx) {
+            sel.value = octIdx;
+            sel.dispatchEvent(new Event('change'));
+          }
+        }
+        else if (d1 === 22) setSliderVal('slider-led-thresh', 20.0, 1000.0, val);
+        else if (d1 === 26) setSliderVal('slider-biomod-depth', 0.0, 4.0, val);
+      }
+    }
+
+    // Update active ripples and calculate crest intensities for each pad
+    function computeRippleIntensities(now) {
+      const rippleIntensities = new Float32Array(64);
+      padRipples = padRipples.filter(pr => (now - pr.birthTime) < pr.durationMs);
+
+      for (let i = 0; i < padRipples.length; i++) {
+        const pr = padRipples[i];
+        const tau = (now - pr.birthTime) / pr.durationMs;
+        if (tau < 0 || tau >= 1.0) continue;
+        const rWave = pr.maxRadius * tau;
+        const amp = Math.max(0.0, 1.0 - tau * 0.65);
+        const sigma = Math.max(0.35, (CONFIG.lpRippleWidth || 3.0) * 0.38);
+        const twoSigmaSq = 2.0 * sigma * sigma;
+
+        for (let r = 0; r < 8; r++) {
+          for (let c = 0; c < 8; c++) {
+            const idx = r * 8 + c;
+            const d = Math.sqrt((c - pr.originCol)**2 + (r - pr.originRow)**2);
+            const delta = Math.abs(d - rWave);
+            let crest = amp * Math.exp(-(delta * delta) / twoSigmaSq);
+            if (c === pr.originCol && r === pr.originRow && tau < 0.25) {
+              const flash = Math.pow(1.0 - (tau / 0.25), 1.5);
+              crest = Math.max(crest, flash);
+            }
+            rippleIntensities[idx] = Math.min(1.0, rippleIntensities[idx] + crest);
+          }
+        }
+      }
+      return rippleIntensities;
+    }
+
+    function evaluateBiomassGradient(mass, threshold, outRgb) {
+      const u = Math.min(1.0, Math.max(0.0, (mass - threshold) / (threshold * 7.0)));
+      const up = Math.pow(u, 0.75);
+      if (up <= 0.001) { outRgb[0] = 0; outRgb[1] = 0; outRgb[2] = 0; return; }
+
+      if (CONFIG.palette === 'mono') {
+        const r = 12.0 + (122.0 - 12.0) * up;
+        outRgb[0] = r; outRgb[1] = r; outRgb[2] = r;
+      } else if (CONFIG.palette === 'cyan') {
+        if (up < 0.5) {
+          const f = up * 2.0;
+          outRgb[0] = 2.0 + (17.0 - 2.0) * f;
+          outRgb[1] = 26.0 + (105.0 - 26.0) * f;
+          outRgb[2] = 37.0 + (119.0 - 37.0) * f;
+        } else {
+          const f = (up - 0.5) * 2.0;
+          outRgb[0] = 17.0 + (103.0 - 17.0) * f;
+          outRgb[1] = 105.0 + (125.0 - 105.0) * f;
+          outRgb[2] = 119.0 + (127.0 - 119.0) * f;
+        }
+      } else { // Yellow (Zorn)
+        if (up < 0.33) {
+          const f = up / 0.33;
+          outRgb[0] = 12.0 + (65.0 - 12.0) * f;
+          outRgb[1] = 6.0 + (38.0 - 6.0) * f;
+          outRgb[2] = 1.0 + (4.0 - 1.0) * f;
+        } else if (up < 0.66) {
+          const f = (up - 0.33) / 0.33;
+          outRgb[0] = 65.0 + (117.0 - 65.0) * f;
+          outRgb[1] = 38.0 + (90.0 - 38.0) * f;
+          outRgb[2] = 4.0 + (6.0 - 4.0) * f;
+        } else {
+          const f = (up - 0.66) / 0.34;
+          outRgb[0] = 117.0 + (127.0 - 117.0) * f;
+          outRgb[1] = 90.0 + (120.0 - 90.0) * f;
+          outRgb[2] = 6.0 + (69.0 - 6.0) * f;
+        }
       }
     }
 
@@ -1118,35 +1522,175 @@
       if (!midiEnabled || !midiOut) return;
       const isMidimix = (midiOut && midiOut.name && midiOut.name.toLowerCase().includes('midimix'));
       if (isMidimix) return; // handled via note events
+
       const now = performance.now();
       if (now - lastMidiFlushTime < 45) return; // ~22Hz dirty update
       lastMidiFlushTime = now;
 
-      for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-          const idx = r * 8 + c;
-          const note = (8 - r) * 10 + (c + 1);
+      const rippleIntensities = computeRippleIntensities(now);
+      const moldRgb = [0, 0, 0];
 
-          const matchingFoods = foodSources.filter(f => f.gridCol === c && f.gridRow === r);
-          let targetColor = 0;
+      if (CONFIG.lpUseRgbSysex) {
+        // Continuous 7-bit RGB Gradient SysEx (Command 03h)
+        const dirtyIndices = [];
+        for (let r = 0; r < 8; r++) {
+          for (let c = 0; c < 8; c++) {
+            const idx = r * 8 + c;
+            const matchingFoods = foodSources.filter(f => f.gridCol === c && f.gridRow === r);
+            const hasFood = (matchingFoods.length > 0 && matchingFoods[0].mass > 0);
+            const cellFood = hasFood ? matchingFoods[0] : null;
+            const isEating = hasFood && (cellFood.isFeeding || cellFood.consumptionActivity > 0.05);
 
-          if (matchingFoods.length > 0) {
-            const sumMass = matchingFoods.reduce((acc, f) => acc + f.mass, 0);
-            if (sumMass > 450) targetColor = 13;      // Bright Yellow
-            else if (sumMass > 250) targetColor = 62; // Warm Ochre
-            else if (sumMass > 100) targetColor = 61; // Dim Ochre
-            else targetColor = 84;                      // Faint Amber
-          } else {
-            const mass = cellBiomass[idx];
-            if (mass > 0.08) targetColor = 37;      // Cyan
-            else if (mass > 0.04) targetColor = 22; // Green
-            else if (mass > 0.01) targetColor = 19; // Dim Green
-            else targetColor = 0;                   // Off
+            let tR = 0, tG = 0, tB = 0;
+            if (CONFIG.lpShowSlime) {
+              smoothBiomass[idx] += (cellBiomass[idx] - smoothBiomass[idx]) * 0.18;
+              const mass = smoothBiomass[idx];
+              const t = Math.max(10.0, CONFIG.ledMassThreshold || 120.0);
+              evaluateBiomassGradient(mass, t, moldRgb);
+              tR = moldRgb[0]; tG = moldRgb[1]; tB = moldRgb[2];
+            }
+
+            if (hasFood && CONFIG.lpShowFood && !isEating) {
+              const breath = 0.85 + 0.15 * Math.sin(now * 0.005 + (r + c) * 0.5);
+              tR = Math.max(tR, 0);
+              tG = Math.max(tG, 110.0 * breath);
+              tB = Math.max(tB, 127.0 * breath);
+            }
+
+            if (isEating && CONFIG.lpShowEating) {
+              const targetRatio = cellFood.mass / cellFood.initialMass;
+              smoothFoodRatio[idx] += (targetRatio - smoothFoodRatio[idx]) * 0.25;
+              const fr = smoothFoodRatio[idx];
+              const feedPulse = 0.85 + 0.15 * Math.sin(now * 0.012);
+              const eatR = (60.0 + (127.0 - 60.0) * fr) * feedPulse;
+              const eatG = 0;
+              const eatB = (110.0 + (75.0 - 110.0) * fr) * feedPulse;
+              const act = Math.min(1.0, Math.max(0.0, cellFood.consumptionActivity));
+              tR = tR + (eatR - tR) * act;
+              tG = tG + (eatG - tG) * act;
+              tB = tB + (eatB - tB) * act;
+            }
+
+            const rip = rippleIntensities[idx];
+            if (rip > 0.001) {
+              const rRip = (rip > 0.6) ? ((rip - 0.6) / 0.4) * 127.0 : 0.0;
+              tR = tR + (rRip - tR) * rip;
+              tG = tG + (127.0 - tG) * rip;
+              tB = tB + (127.0 - tB) * rip;
+            }
+
+            currentPadR[idx] += (tR - currentPadR[idx]) * 0.28;
+            currentPadG[idx] += (tG - currentPadG[idx]) * 0.28;
+            currentPadB[idx] += (tB - currentPadB[idx]) * 0.28;
+
+            const qR = Math.min(127, Math.max(0, Math.round(currentPadR[idx])));
+            const qG = Math.min(127, Math.max(0, Math.round(currentPadG[idx])));
+            const qB = Math.min(127, Math.max(0, Math.round(currentPadB[idx])));
+
+            if (qR !== lastSentPadR[idx] || qG !== lastSentPadG[idx] || qB !== lastSentPadB[idx]) {
+              dirtyIndices.push(idx);
+            }
           }
+        }
 
-          if (padDirtyBuffer[idx] !== targetColor) {
-            padDirtyBuffer[idx] = targetColor;
-            try { midiOut.send([0x90, note, targetColor]); } catch(e){}
+        if (dirtyIndices.length > 0) {
+          const chunkSize = 50;
+          for (let i = 0; i < dirtyIndices.length; i += chunkSize) {
+            const count = Math.min(chunkSize, dirtyIndices.length - i);
+            const sysex = [0xF0, 0x00, 0x20, 0x29, 0x02, 0x0D, 0x03];
+            for (let k = 0; k < count; k++) {
+              const idx = dirtyIndices[i + k];
+              const r = Math.floor(idx / 8);
+              const c = idx % 8;
+              const ledIndex = (8 - r) * 10 + (c + 1);
+              const qR = Math.min(127, Math.max(0, Math.round(currentPadR[idx])));
+              const qG = Math.min(127, Math.max(0, Math.round(currentPadG[idx])));
+              const qB = Math.min(127, Math.max(0, Math.round(currentPadB[idx])));
+              lastSentPadR[idx] = qR;
+              lastSentPadG[idx] = qG;
+              lastSentPadB[idx] = qB;
+              sysex.push(0x03, ledIndex, qR, qG, qB);
+            }
+            sysex.push(0xF7);
+            try { midiOut.send(sysex); } catch(e) {}
+          }
+        }
+      } else {
+        // Standard Channel-Based MIDI Streaming (Static Ch 1, Flashing Ch 2, Pulsing Ch 3 with Trilateral Domain)
+        for (let r = 0; r < 8; r++) {
+          for (let c = 0; c < 8; c++) {
+            const idx = r * 8 + c;
+            const progNote = (8 - r) * 10 + (c + 1);
+            const userNote = getLaunchpadUserNote(c, r);
+            const note = CONFIG.lpUserMode ? userNote : progNote;
+
+            const matchingFoods = foodSources.filter(f => f.gridCol === c && f.gridRow === r);
+            const hasFood = (matchingFoods.length > 0 && matchingFoods[0].mass > 0);
+            const cellFood = hasFood ? matchingFoods[0] : null;
+            const isEating = hasFood && (cellFood.isFeeding || cellFood.consumptionActivity > 0.05);
+
+            let targetChan = 1; // 1 = Static, 2 = Flashing, 3 = Pulsing
+            let targetVel = 0;
+
+            if (CONFIG.lpShowSlime) {
+              smoothBiomass[idx] += (cellBiomass[idx] - smoothBiomass[idx]) * 0.18;
+              const mass = smoothBiomass[idx];
+              const t = Math.max(10.0, CONFIG.ledMassThreshold || 120.0);
+
+              if (mass >= t * 0.7) {
+                if (CONFIG.palette === 'cyan') {
+                  if (mass >= t * 6.0) { targetChan = 1; targetVel = 3; }
+                  else if (mass >= t * 4.0) { targetChan = 1; targetVel = 78; }
+                  else if (mass >= t * 2.5) { targetChan = 1; targetVel = 37; }
+                  else if (mass >= t * 1.5) { targetChan = 1; targetVel = 38; }
+                  else if (mass >= t * 1.0) { targetChan = 1; targetVel = 39; }
+                  else { targetChan = 3; targetVel = 39; }
+                } else if (CONFIG.palette === 'mono') {
+                  if (mass >= t * 6.0) { targetChan = 1; targetVel = 3; }
+                  else if (mass >= t * 3.5) { targetChan = 1; targetVel = 2; }
+                  else if (mass >= t * 1.5) { targetChan = 1; targetVel = 1; }
+                  else { targetChan = 3; targetVel = 1; }
+                } else { // Yellow / Zorn
+                  if (mass >= t * 8.0) { targetChan = 1; targetVel = 12; }
+                  else if (mass >= t * 5.0) { targetChan = 1; targetVel = 13; }
+                  else if (mass >= t * 3.0) { targetChan = 1; targetVel = 14; }
+                  else if (mass >= t * 1.8) { targetChan = 1; targetVel = 15; }
+                  else if (mass >= t * 1.0) { targetChan = 1; targetVel = 62; }
+                  else if (mass >= t * 0.7) { targetChan = 1; targetVel = 84; }
+                  else { targetChan = 3; targetVel = 11; }
+                }
+              }
+            }
+
+            if (hasFood && CONFIG.lpShowFood && !isEating) {
+              targetChan = 3; // Pulsing
+              targetVel = 37; // Electric Cyan
+            }
+
+            if (isEating && CONFIG.lpShowEating) {
+              targetChan = 3; // Pulsing
+              const ratio = cellFood.mass / cellFood.initialCapacity;
+              if (ratio > 0.65) targetVel = 53;      // Brilliant Magenta
+              else if (ratio > 0.35) targetVel = 54; // Deep Magenta
+              else if (ratio > 0.15) targetVel = 55; // Medium Purple
+              else targetVel = 52;                   // Soft Lavender
+            }
+
+            const rip = rippleIntensities[idx];
+            if (rip > 0.05) {
+              targetChan = 1;
+              if (rip > 0.75) targetVel = 3;       // White
+              else if (rip > 0.45) targetVel = 78;  // Aqua Cyan
+              else if (rip > 0.20) targetVel = 37;  // Cyan
+              else targetVel = 39;                  // Deep Cyan
+            }
+
+            if (padDirtyBuffer[idx] !== targetVel || padDirtyChannels[idx] !== targetChan) {
+              padDirtyBuffer[idx] = targetVel;
+              padDirtyChannels[idx] = targetChan;
+              const ch = (targetChan - 1) & 0x0F;
+              try { midiOut.send([0x90 | ch, note, targetVel]); } catch(e){}
+            }
           }
         }
       }
@@ -1155,48 +1699,221 @@
     // --- STREAMING_CHUNK:Binding UI event listeners to simulation parameters ---
 
     function updateReverbRouting() {
-      if (!audioCtx) return;
+      if (!audioCtx || !reverbDryGain || !reverbWetGain) return;
       reverbDryGain.gain.setTargetAtTime(CONFIG.reverbDry, audioCtx.currentTime, 0.05);
       reverbWetGain.gain.setTargetAtTime(CONFIG.reverbEnabled ? CONFIG.reverbWet : 0, audioCtx.currentTime, 0.05);
     }
 
+    // Algorithmic Velvet Noise Impulse Response Generator (Direct port of VelvetImpulseGenerator.java)
     function generateReverbIR() {
       if (!audioCtx || !reverbConvolver) return;
-      const sr = audioCtx.sampleRate;
-      const length = Math.floor(sr * CONFIG.reverbT60);
-      const buffer = audioCtx.createBuffer(2, length, sr);
-      const l = buffer.getChannelData(0);
-      const r = buffer.getChannelData(1);
-      
-      const preDelaySamples = Math.floor(sr * CONFIG.reverbPreDelay);
-      
-      for (let i = preDelaySamples; i < length; i++) {
-        // Simple exponential decay white noise to simulate Velvet Convolver
-        const decay = Math.exp(-6.91 * (i - preDelaySamples) / length); // -60dB decay
-        // Apply high damping (simple 1-pole IIR)
-        // Here we just use a basic noise for mock UI parity
-        if (Math.random() < 0.05) { // sparse noise
-          l[i] = (Math.random() * 2 - 1) * decay;
+      const sr = audioCtx.sampleRate || 44100;
+      const t60 = Math.max(0.05, CONFIG.reverbT60);
+      const d0 = 2000.0;
+      const dMax = 10000.0;
+      const highDamping = Math.min(0.95, Math.max(0.05, CONFIG.reverbHighDamping));
+      const preDelaySeconds = Math.max(0, CONFIG.reverbPreDelay);
+      const seed = (CONFIG.reverbSeed !== undefined) ? (CONFIG.reverbSeed >>> 0) : 1337;
+
+      const totalSamples = Math.max(1, Math.floor(sr * t60));
+      const preDelaySamples = Math.max(0, Math.floor(sr * preDelaySeconds));
+      const totalLength = totalSamples + preDelaySamples;
+
+      const buffer = audioCtx.createBuffer(2, totalLength, sr);
+      const irL = buffer.getChannelData(0);
+      const irR = buffer.getChannelData(1);
+
+      // Simple fast Mulberry32 PRNG for predictable, decorrelated stereo seeds
+      function createRng(s) {
+        let state = (s >>> 0);
+        return function() {
+          state = (state + 0x6D2B79F5) >>> 0;
+          let t = Math.imul(state ^ (state >>> 15), 1 | state);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function generateChannel(buf, rng) {
+        const rawPulses = new Float32Array(totalSamples);
+        let currSample = 0;
+        while (currSample < totalSamples) {
+          const normT = Math.min(1.0, Math.max(0.0, currSample / (sr * t60)));
+          const d = d0 + (dMax - d0) * Math.sqrt(normT);
+          const td = Math.max(1, Math.round(sr / d));
+          const jitter = (td > 1) ? Math.floor(rng() * (td - 1)) : 0;
+          const pulsePos = currSample + jitter;
+          const sign = rng() > 0.5 ? 1.0 : -1.0;
+          if (pulsePos < totalSamples) {
+            rawPulses[pulsePos] = sign;
+          }
+          currSample += td;
         }
-        if (Math.random() < 0.05) {
-          r[i] = (Math.random() * 2 - 1) * decay;
+
+        const tAttack = Math.min(0.010, t60 * 0.1);
+        const nAttack = Math.max(1, Math.floor(sr * tAttack));
+        const sigma = nAttack / 3.0;
+        const twoSigmaSq = 2.0 * sigma * sigma;
+
+        for (let n = 0; n < totalSamples; n++) {
+          if (rawPulses[n] === 0.0) continue;
+          let decayEnv = Math.exp(-6.907755 * n / (sr * t60));
+          if (n < nAttack) {
+            const diff = n - nAttack;
+            decayEnv *= Math.exp(-(diff * diff) / twoSigmaSq);
+          }
+          rawPulses[n] *= decayEnv;
+        }
+
+        const alphaBase = 0.05;
+        const alphaMax = highDamping;
+        let yPrev = 0.0;
+        for (let n = 0; n < totalSamples; n++) {
+          const alpha = alphaBase + (alphaMax - alphaBase) * (n / totalSamples);
+          const y = (1.0 - alpha) * rawPulses[n] + alpha * yPrev;
+          yPrev = y;
+          buf[preDelaySamples + n] = y;
         }
       }
-      // Normalize IR energy (L2 norm) to calibrated studio reverberant headroom (-3dBFS ~ 0.7071)
+
+      generateChannel(irL, createRng(seed));
+      generateChannel(irR, createRng((seed ^ 0x5DEECE66) >>> 0));
+
+      // L2 Normalization to -3dBFS
       let sumSq = 0.0;
-      for (let i = 0; i < length; i++) {
-        sumSq += l[i] * l[i] + r[i] * r[i];
+      for (let i = 0; i < totalLength; i++) {
+        sumSq += irL[i] * irL[i] + irR[i] * irR[i];
       }
       const l2Norm = Math.sqrt(sumSq * 0.5);
-
       if (l2Norm > 1e-7) {
         const normScale = 0.70710678 / l2Norm;
-        for (let i = 0; i < length; i++) {
-          l[i] *= normScale;
-          r[i] *= normScale;
+        for (let i = 0; i < totalLength; i++) {
+          irL[i] *= normScale;
+          irR[i] *= normScale;
         }
       }
+
       reverbConvolver.buffer = buffer;
+    }
+
+    // Dynamic Bio-Sonification Telemetry (Direct port of updateReverbBioTelemetry)
+    let lastIrRegenTime = 0;
+    function triggerIrRegenDebounced() {
+      const now = performance.now();
+      if (now - lastIrRegenTime < 250) return;
+      lastIrRegenTime = now;
+      generateReverbIR();
+    }
+
+    function syncReverbUiSliders() {
+      const elWet = document.getElementById('slider-rev-wet');
+      const elDry = document.getElementById('slider-rev-dry');
+      const elT60 = document.getElementById('slider-rev-t60');
+      const elDamp = document.getElementById('slider-rev-damp');
+      const elPre = document.getElementById('slider-rev-pre');
+      if (elWet && document.activeElement !== elWet) { elWet.value = CONFIG.reverbWet; document.getElementById('lbl-rev-wet').innerText = CONFIG.reverbWet.toFixed(2); }
+      if (elDry && document.activeElement !== elDry) { elDry.value = CONFIG.reverbDry; document.getElementById('lbl-rev-dry').innerText = CONFIG.reverbDry.toFixed(2); }
+      if (elT60 && document.activeElement !== elT60) { elT60.value = CONFIG.reverbT60; document.getElementById('lbl-rev-t60').innerText = CONFIG.reverbT60.toFixed(1) + 's'; }
+      if (elDamp && document.activeElement !== elDamp) { elDamp.value = CONFIG.reverbHighDamping; document.getElementById('lbl-rev-damp').innerText = CONFIG.reverbHighDamping.toFixed(2); }
+      if (elPre && document.activeElement !== elPre) { elPre.value = CONFIG.reverbPreDelay; document.getElementById('lbl-rev-pre').innerText = CONFIG.reverbPreDelay.toFixed(3) + 's'; }
+    }
+
+    function computePetriDispersion() {
+      let maxDistFromCenter = 0.0;
+      let occupiedCells = 0;
+      for (let i = 0; i < 64; i++) {
+        if (cellBiomass[i] > 25.0) {
+          occupiedCells++;
+          const c = i % CONFIG.gridDim;
+          const r = Math.floor(i / CONFIG.gridDim);
+          const dx = (c + 0.5) - 3.5;
+          const dy = (r + 0.5) - 3.5;
+          const distFromCenter = Math.sqrt(dx * dx + dy * dy) / 4.95;
+          if (distFromCenter > maxDistFromCenter) maxDistFromCenter = distFromCenter;
+        }
+      }
+      const colonySpread = Math.min(1.0, Math.max(0.0, maxDistFromCenter));
+      const spreadRatio = Math.min(2.0, Math.max(0.0, occupiedCells / 32.0));
+      return [colonySpread, spreadRatio];
+    }
+
+    function computeFeedingRatio() {
+      let totalFeeding = 0.0;
+      let activeFoodCount = 0;
+      for (let f = 0; f < foodSources.length; f++) {
+        const fn = foodSources[f];
+        activeFoodCount++;
+        if (fn.isFeeding || fn.consumptionActivity > 0.05) totalFeeding += fn.consumptionActivity;
+      }
+      return (activeFoodCount > 0) ? Math.min(1.0, Math.max(0.0, totalFeeding / activeFoodCount)) : 0.0;
+    }
+
+    function updateReverbBioTelemetry() {
+      if (!CONFIG.autoModulateReverb) return;
+      if (CONFIG.reverbBioModDepth <= 0.001) {
+        CONFIG.reverbWet = CONFIG.baseReverbWet;
+        CONFIG.reverbDry = CONFIG.baseReverbDry;
+        CONFIG.reverbT60 = CONFIG.baseReverbT60;
+        CONFIG.reverbHighDamping = CONFIG.baseReverbHighDamping;
+        CONFIG.reverbPreDelay = CONFIG.baseReverbPreDelay;
+        syncReverbUiSliders();
+        updateReverbRouting();
+        return;
+      }
+
+      let totalBiomass = 0.0;
+      for (let i = 0; i < 64; i++) totalBiomass += cellBiomass[i];
+
+      const nominalBiomass = Math.max(1000.0, CONFIG.targetAgentCount * 50.0);
+      const massRatio = totalBiomass / nominalBiomass;
+      const massDelta = massRatio - 1.0;
+
+      const [colonySpread, spreadRatio] = computePetriDispersion();
+      const feedingRatio = computeFeedingRatio();
+
+      const locoFactor = Math.min(3.0, Math.max(0.2, CONFIG.locomotionCost / 0.018));
+      const sensorFactor = Math.min(3.0, Math.max(0.2, CONFIG.sensorDist / 40.0));
+
+      const wetDelta = massDelta * 0.20 + (colonySpread - 0.4) * 0.15 + feedingRatio * 0.15;
+      const targetWet = Math.min(1.0, Math.max(0.0, CONFIG.baseReverbWet + wetDelta * CONFIG.reverbBioModDepth));
+      const targetDry = Math.min(1.0, Math.max(0.05, CONFIG.baseReverbDry - (wetDelta * 0.75) * CONFIG.reverbBioModDepth));
+
+      CONFIG.reverbWet += (targetWet - CONFIG.reverbWet) * 0.12;
+      CONFIG.reverbDry += (targetDry - CONFIG.reverbDry) * 0.12;
+
+      const dampDelta = feedingRatio * 0.16 + (spreadRatio - 0.5) * 0.12 - (locoFactor - 1.0) * 0.10;
+      const targetDamp = Math.min(0.95, Math.max(0.05, CONFIG.baseReverbHighDamping + dampDelta * CONFIG.reverbBioModDepth));
+
+      const preDelta = (colonySpread - 0.3) * 0.015 + (sensorFactor - 1.0) * 0.010;
+      const targetPreDelay = Math.min(0.060, Math.max(0.005, CONFIG.baseReverbPreDelay + preDelta * CONFIG.reverbBioModDepth));
+
+      const t60Delta = massDelta * 0.7 + (colonySpread - 0.4) * 0.5 + feedingRatio * 0.4;
+      const targetT60 = Math.min(4.0, Math.max(0.5, CONFIG.baseReverbT60 + t60Delta * CONFIG.reverbBioModDepth));
+
+      let needRegen = false;
+      const burstThreshold = CONFIG.lastMitosisBiomassThreshold * (1.0 + 0.35 / Math.max(0.5, CONFIG.reverbBioModDepth));
+      if (totalBiomass >= burstThreshold && totalBiomass > 2000.0) {
+        CONFIG.reverbSeed = (Date.now() ^ Math.floor(totalBiomass)) >>> 0;
+        CONFIG.lastMitosisBiomassThreshold = totalBiomass;
+        needRegen = true;
+      }
+
+      if (Math.abs(CONFIG.reverbHighDamping - targetDamp) > 0.06) {
+        CONFIG.reverbHighDamping = targetDamp;
+        needRegen = true;
+      }
+      if (Math.abs(CONFIG.reverbPreDelay - targetPreDelay) > 0.008) {
+        CONFIG.reverbPreDelay = targetPreDelay;
+        needRegen = true;
+      }
+      if (Math.abs(CONFIG.reverbT60 - targetT60) > 0.20) {
+        CONFIG.reverbT60 = targetT60;
+        needRegen = true;
+      }
+
+      if (needRegen) triggerIrRegenDebounced();
+      updateReverbRouting();
+      syncReverbUiSliders();
     }
 
     // Connect voices to reverb split instead of directly to masterGain
@@ -1279,21 +1996,26 @@
     });
 
     document.getElementById('btn-reinoculate').addEventListener('click', () => {
-      // Reinoculate colony
+      // Reinoculate colony (Keep food nodules, reset colony & trail field)
       trailMap.fill(0);
+      nextTrailMap.fill(0);
       cellBiomass.fill(0);
       agents = [];
       const cx = CONFIG.worldDim / 2;
       const cy = CONFIG.worldDim / 2;
       for (let i = 0; i < CONFIG.targetAgentCount; i++) {
         const th = Math.random() * Math.PI * 2;
-        const r = Math.random() * 4;
+        const r = Math.random() * 8;
         agents.push(new Agent(cx + Math.cos(th) * r, cy + Math.sin(th) * r, Math.random() * Math.PI * 2));
       }
       foodSources.forEach(f => {
         f.grazingBuffer = 0;
         f.isFeeding = false;
+        f.vcaGain = 0;
+        f.elevationNorm = 0;
       });
+      CONFIG.lastMitosisBiomassThreshold = 8000.0;
+      CONFIG.reverbSeed = Date.now() >>> 0;
       generateReverbIR(); // Reset IR just like Processing
     });
 
@@ -1347,7 +2069,71 @@
     });
 
     document.getElementById('btn-regen-ir').addEventListener('click', () => {
+      CONFIG.reverbSeed = Date.now() >>> 0;
       generateReverbIR();
+    });
+
+    document.getElementById('slider-biomod-depth').addEventListener('input', (e) => {
+      CONFIG.reverbBioModDepth = parseFloat(e.target.value);
+      document.getElementById('lbl-biomod-depth').innerText = `${CONFIG.reverbBioModDepth.toFixed(1)}x`;
+    });
+
+    document.getElementById('slider-led-thresh').addEventListener('input', (e) => {
+      CONFIG.ledMassThreshold = parseFloat(e.target.value);
+      document.getElementById('lbl-led-thresh').innerText = Math.round(CONFIG.ledMassThreshold);
+      resetPadDirtyCaches();
+    });
+
+    document.getElementById('slider-ripple-width').addEventListener('input', (e) => {
+      CONFIG.lpRippleWidth = parseFloat(e.target.value);
+      document.getElementById('lbl-ripple-width').innerText = `${CONFIG.lpRippleWidth.toFixed(1)} px`;
+    });
+
+    document.getElementById('btn-lp-slime').addEventListener('click', () => {
+      CONFIG.lpShowSlime = !CONFIG.lpShowSlime;
+      const btn = document.getElementById('btn-lp-slime');
+      btn.innerText = CONFIG.lpShowSlime ? 'MOLD ON' : 'MOLD OFF';
+      btn.className = CONFIG.lpShowSlime ? 'py-1 rounded bg-yellow-950 text-yellow-300 border border-yellow-700 font-mono text-[10px] transition-colors' : 'py-1 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 font-mono text-[10px] transition-colors';
+      resetPadDirtyCaches();
+      syncLpSideLeds();
+    });
+
+    document.getElementById('btn-lp-food').addEventListener('click', () => {
+      CONFIG.lpShowFood = !CONFIG.lpShowFood;
+      const btn = document.getElementById('btn-lp-food');
+      btn.innerText = CONFIG.lpShowFood ? 'FOOD ON' : 'FOOD OFF';
+      btn.className = CONFIG.lpShowFood ? 'py-1 rounded bg-cyan-950 text-cyan-300 border border-cyan-700 font-mono text-[10px] transition-colors' : 'py-1 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 font-mono text-[10px] transition-colors';
+      resetPadDirtyCaches();
+      syncLpSideLeds();
+    });
+
+    document.getElementById('btn-lp-eat').addEventListener('click', () => {
+      CONFIG.lpShowEating = !CONFIG.lpShowEating;
+      const btn = document.getElementById('btn-lp-eat');
+      btn.innerText = CONFIG.lpShowEating ? 'EAT ON' : 'EAT OFF';
+      btn.className = CONFIG.lpShowEating ? 'py-1 rounded bg-fuchsia-950 text-fuchsia-300 border border-fuchsia-700 font-mono text-[10px] transition-colors' : 'py-1 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 font-mono text-[10px] transition-colors';
+      resetPadDirtyCaches();
+      syncLpSideLeds();
+    });
+
+    document.getElementById('btn-lp-usermode').addEventListener('click', () => {
+      CONFIG.lpUserMode = !CONFIG.lpUserMode;
+      const btn = document.getElementById('btn-lp-usermode');
+      btn.innerText = CONFIG.lpUserMode ? 'USER MODE' : 'PROGRAMMER';
+      resetPadDirtyCaches();
+    });
+
+    document.getElementById('btn-lp-rgb').addEventListener('click', () => {
+      CONFIG.lpUseRgbSysex = !CONFIG.lpUseRgbSysex;
+      const btn = document.getElementById('btn-lp-rgb');
+      btn.innerText = CONFIG.lpUseRgbSysex ? 'RGB GRADIENT' : 'PALETTE LED';
+      btn.className = CONFIG.lpUseRgbSysex ? 'py-1 rounded bg-cyan-950 text-cyan-300 border border-cyan-700 font-mono text-[10px] transition-colors' : 'py-1 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 font-mono text-[10px] transition-colors';
+      resetPadDirtyCaches();
+    });
+
+    document.getElementById('btn-rescan-midi').addEventListener('click', () => {
+      if (midiAccess) scanMidiPorts();
+      else initializeWebMidi();
     });
 
     document.getElementById('slider-sharpness').addEventListener('input', (e) => {
