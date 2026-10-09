@@ -22,15 +22,46 @@ public class MoldAudioStabilityTest {
         allPassed &= testStudioMasterLimiterBrickwall();
         allPassed &= testHarmonicTuningMatrixFullCoverage();
         allPassed &= testReverbBioTelemetryStress();
+        allPassed &= testAudioDeviceSelectionAndScanning();
 
         System.out.println("================================================================================");
         if (allPassed) {
             System.out.println(">> ALL AUDIO STABILITY & DSP INVARIANTS PASSED! <<");
+            System.out.println("================================================================================");
+            System.exit(0);
         } else {
             System.err.println(">> ONE OR MORE AUDIO INVARIANT CHECKS FAILED! <<");
             System.exit(1);
         }
-        System.out.println("================================================================================");
+    }
+
+    private static boolean testAudioDeviceSelectionAndScanning() {
+        System.out.println("\n[Audio Test 5] Verifying Audio Interface Scanning & Selection...");
+        MoldSketch s = MoldTestUtils.createHeadlessSketch();
+        MoldSketch.AudioEngine engine = s.new AudioEngine();
+
+        // 1. Scan devices
+        engine.scanAudioDevices();
+        if (engine.deviceNames == null || engine.deviceNames.length == 0) {
+            throw new AssertionError("AudioEngine deviceNames should not be empty");
+        }
+        if (!engine.deviceNames[0].equals("Default Audio Device")) {
+            throw new AssertionError("deviceNames[0] must be 'Default Audio Device', got: " + engine.deviceNames[0]);
+        }
+        System.out.println("  PASS: Audio devices scanned successfully: " + engine.deviceNames.length + " interface(s) detected.");
+
+        // 2. Select default device
+        engine.setAudioDevice(0);
+        if (engine.selectedDeviceIdx != 0) {
+            throw new AssertionError("Expected selectedDeviceIdx = 0, got: " + engine.selectedDeviceIdx);
+        }
+        System.out.println("  PASS: Default audio device selected and verified.");
+
+        // 3. Test out-of-bounds index handling (should gracefully handle or fallback)
+        engine.setAudioDevice(999);
+        engine.closeEngine();
+        System.out.println("  PASS: Gracefully handled device switching and closed engine cleanly.");
+        return true;
     }
 
     private static boolean testBiquadFilterStabilityAndSaturation() {

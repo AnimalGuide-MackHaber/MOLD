@@ -27,11 +27,12 @@ public class ConvolverVerificationTest {
         System.out.println("================================================================================");
         if (allPassed) {
             System.out.println(">> ALL SPECIFICATION ACCEPTANCE CRITERIA VERIFIED & PASSED! <<");
+            System.out.println("================================================================================");
+            System.exit(0);
         } else {
             System.err.println(">> ONE OR MORE ACCEPTANCE CRITERIA FAILED! <<");
             System.exit(1);
         }
-        System.out.println("================================================================================");
     }
 
     /**

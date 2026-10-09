@@ -2,6 +2,8 @@
 
 An interactive generative bio-simulation and real-time audio synthesizer written in Processing (Java Mode). The system simulates the emergent foraging behavior, chemotaxis, and network formation of the true slime mold (*Physarum polycephalum*), mapping its growth dynamics directly into sound synthesis, spatial stereo panning, and an algorithmic velvet-noise convolution reverberator.
 
+**Live Interactive Web App:** [https://animalguide-mackhaber.github.io/MOLD/](https://animalguide-mackhaber.github.io/MOLD/)
+
 ---
 
 ## Key Features

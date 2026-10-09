@@ -343,6 +343,100 @@ class AudioEngine extends Thread {
   final int SAMPLE_RATE = 44100;
   final int BUFFER_SAMPLES = 512;
 
+  final Object lineLock = new Object();
+  ArrayList<Mixer.Info> outputMixerInfos = new ArrayList<Mixer.Info>();
+  String[] deviceNames = {"Default Audio Device"};
+  int selectedDeviceIdx = 0; // 0 = Default, 1..N = specific mixers
+  String currentDeviceName = "Default Audio Device";
+
+  AudioFormat getAudioFormat() {
+    return new AudioFormat(SAMPLE_RATE, 16, 2, true, false);
+  }
+
+  void scanAudioDevices() {
+    outputMixerInfos.clear();
+    ArrayList<String> names = new ArrayList<String>();
+    names.add("Default Audio Device");
+
+    AudioFormat fmt = getAudioFormat();
+    DataLine.Info info = new DataLine.Info(SourceDataLine.class, fmt);
+
+    try {
+      for (Mixer.Info mInfo : AudioSystem.getMixerInfo()) {
+        try {
+          Mixer mixer = AudioSystem.getMixer(mInfo);
+          if (mixer.isLineSupported(info)) {
+            String mName = mInfo.getName();
+            // Avoid duplicate default entries in the list
+            if (!mName.equalsIgnoreCase("Default Audio Device")) {
+              outputMixerInfos.add(mInfo);
+              names.add(mName);
+            }
+          }
+        } catch (Exception e) {}
+      }
+    } catch (Exception e) {
+      println("Audio Device Scan Notice: " + e.getMessage());
+    }
+
+    deviceNames = names.toArray(new String[0]);
+    if (selectedDeviceIdx >= deviceNames.length) {
+      selectedDeviceIdx = 0;
+    }
+    currentDeviceName = deviceNames[selectedDeviceIdx];
+  }
+
+  boolean openAudioLine(int idx) {
+    AudioFormat fmt = getAudioFormat();
+    DataLine.Info info = new DataLine.Info(SourceDataLine.class, fmt);
+    SourceDataLine newLine = null;
+
+    try {
+      if (idx <= 0 || idx > outputMixerInfos.size()) {
+        newLine = (SourceDataLine) AudioSystem.getLine(info);
+      } else {
+        Mixer.Info mInfo = outputMixerInfos.get(idx - 1);
+        Mixer mixer = AudioSystem.getMixer(mInfo);
+        newLine = (SourceDataLine) mixer.getLine(info);
+      }
+
+      newLine.open(fmt, 32768); // ~185ms audio driver buffer headroom prevents under-runs
+      newLine.start();
+
+      SourceDataLine oldLine = null;
+      synchronized (lineLock) {
+        oldLine = line;
+        line = newLine;
+        selectedDeviceIdx = idx;
+        currentDeviceName = (idx >= 0 && idx < deviceNames.length) ? deviceNames[idx] : "Default Audio Device";
+      }
+
+      if (oldLine != null) {
+        try {
+          oldLine.stop();
+          oldLine.close();
+        } catch (Exception e) {}
+      }
+      println("Audio output opened on: " + currentDeviceName);
+      return true;
+    } catch (Exception e) {
+      println("Audio Device Open Error on [" + ((idx >= 0 && idx < deviceNames.length) ? deviceNames[idx] : idx) + "]: " + e.getMessage());
+      if (newLine != null) {
+        try { newLine.close(); } catch (Exception ex) {}
+      }
+      return false;
+    }
+  }
+
+  void setAudioDevice(int idx) {
+    if (idx == selectedDeviceIdx && line != null && line.isOpen()) return;
+    boolean ok = openAudioLine(idx);
+    if (!ok && idx != 0) {
+      println("Falling back to Default Audio Device...");
+      openAudioLine(0);
+    }
+  }
+
   public void run() {
     try {
       Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
@@ -354,11 +448,8 @@ class AudioEngine extends Thread {
       );
       convolver.loadImpulseResponse(ir.left, ir.right);
 
-      AudioFormat format = new AudioFormat(SAMPLE_RATE, 16, 2, true, false);
-      DataLine.Info info = new DataLine.Info(SourceDataLine.class, format);
-      line = (SourceDataLine) AudioSystem.getLine(info);
-      line.open(format, 32768); // ~185ms audio driver buffer headroom prevents under-runs
-      line.start();
+      scanAudioDevices();
+      openAudioLine(selectedDeviceIdx);
 
       float[] sineTable = new float[4096];
       for (int i = 0; i < 4096; i++) {
@@ -375,8 +466,20 @@ class AudioEngine extends Thread {
       float[] masterOutR = new float[BUFFER_SAMPLES];
 
       while (running) {
+        SourceDataLine currentLine;
+        synchronized (lineLock) {
+          currentLine = line;
+        }
+
+        if (currentLine == null || !currentLine.isOpen()) {
+          try { Thread.sleep(10); } catch (Exception e) {}
+          continue;
+        }
+
         if (!audioEnabled || foodNodes.isEmpty()) {
-          line.write(silence, 0, silence.length);
+          try {
+            currentLine.write(silence, 0, silence.length);
+          } catch (Exception e) {}
           try { Thread.sleep(8); } catch (Exception e) {}
           continue;
         }
@@ -414,7 +517,9 @@ class AudioEngine extends Thread {
         masterLimiter.process(outL, outR, masterOutL, masterOutR, BUFFER_SAMPLES);
         encodePcmBytes(masterOutL, masterOutR, byteBuffer);
 
-        line.write(byteBuffer, 0, byteBuffer.length);
+        try {
+          currentLine.write(byteBuffer, 0, byteBuffer.length);
+        } catch (Exception e) {}
       }
     } catch (Exception e) {
       println("Audio Engine Exception: " + e.getMessage());
@@ -528,9 +633,14 @@ class AudioEngine extends Thread {
 
   void closeEngine() {
     running = false;
-    if (line != null) {
-      line.stop();
-      line.close();
+    synchronized (lineLock) {
+      if (line != null) {
+        try {
+          line.stop();
+          line.close();
+        } catch (Exception e) {}
+        line = null;
+      }
     }
   }
 }

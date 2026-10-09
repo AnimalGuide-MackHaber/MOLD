@@ -173,5 +173,6 @@ public class MoldStereoSpatializationTest {
         System.out.println("================================================================================");
         System.out.println(">> ALL 3D BINAURAL & STEREO SPATIALIZATION TESTS PASSED! <<");
         System.out.println("================================================================================");
+        System.exit(0);
     }
 }

@@ -191,6 +191,8 @@ volatile boolean pendingReinoculateFboClear = false;
 
 // UI
 UIPanel ui;
+Dropdown audioDeviceDropdown;
+Button rescanAudioBtn;
 Dropdown midiInDropdown;
 Dropdown midiOutDropdown;
 Dropdown midimixInDropdown;

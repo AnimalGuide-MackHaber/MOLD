@@ -34,11 +34,12 @@ public class MoldMidiControllerTest {
         System.out.println("================================================================================");
         if (allPassed) {
             System.out.println(">> ALL HARDWARE MIDI CONTROLLER & TELEMETRY TESTS PASSED! <<");
+            System.out.println("================================================================================");
+            System.exit(0);
         } else {
             System.err.println(">> ONE OR MORE HARDWARE MIDI CHECKS FAILED! <<");
             System.exit(1);
         }
-        System.out.println("================================================================================");
     }
 
     private static boolean testAkaiMidimixFullCcRangeSweep() throws Exception {

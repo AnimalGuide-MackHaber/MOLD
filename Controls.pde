@@ -9,6 +9,10 @@ Section buildTransportSection() {
   agentCountSlider = new Slider("TARGET AGENT COUNT", 1000f, 64000f, 100f, targetAgentCount, 0, "", v -> targetAgentCount = (int) v);
   pauseToggle = new Toggle("PAUSE", "RESUME", isPaused, UI_RED, v -> isPaused = v);
   audioToggle = new Toggle("AUDIO: OFF", "AUDIO: ON", audioEnabled, UI_GREEN, v -> audioEnabled = v);
+  audioDeviceDropdown = new Dropdown("AUDIO INTERFACE", (audioEngine != null ? audioEngine.deviceNames : new String[]{"Default Audio Device"}), (audioEngine != null ? audioEngine.selectedDeviceIdx : 0), i -> {
+    if (audioEngine != null) audioEngine.setAudioDevice(i);
+  });
+  rescanAudioBtn = new Button("Rescan Audio Devices", UI_TEXT, () -> rescanAudioDevices());
   scatterOatsBtn = new Button("Scatter Oats", UI_TEXT, () -> scatterInitialFood(4));
   clearFoodBtn = new Button("Clear Food", 0xFFF87171, () -> clearAllFood());
   reinoculateBtn = new Button("Re-Inoculate Mold (Keep Food)", UI_YELLOW, () -> reinoculate());
@@ -18,6 +22,8 @@ Section buildTransportSection() {
     simSpeedSlider,
     agentCountSlider,
     new Row(pauseToggle, audioToggle),
+    audioDeviceDropdown,
+    rescanAudioBtn,
     new Row(scatterOatsBtn, clearFoodBtn),
     reinoculateBtn,
     fullScreenToggle
@@ -207,6 +213,15 @@ void rescanMidi() {
   if (midiOutDropdown != null) midiOutDropdown.setOptions(midiHandler.outNames, midiHandler.lpOutSel);
   if (midimixInDropdown != null) midimixInDropdown.setOptions(midiHandler.inNames, midiHandler.mmInSel);
   if (midimixOutDropdown != null) midimixOutDropdown.setOptions(midiHandler.outNames, midiHandler.mmOutSel);
+}
+
+void rescanAudioDevices() {
+  if (audioEngine != null) {
+    audioEngine.scanAudioDevices();
+    if (audioDeviceDropdown != null) {
+      audioDeviceDropdown.setOptions(audioEngine.deviceNames, audioEngine.selectedDeviceIdx);
+    }
+  }
 }
 
 void clearAllFood() {

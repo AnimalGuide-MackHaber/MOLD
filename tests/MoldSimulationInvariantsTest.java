@@ -28,11 +28,12 @@ public class MoldSimulationInvariantsTest {
         System.out.println("================================================================================");
         if (allPassed) {
             System.out.println(">> ALL SIMULATION & BIOENERGETICS INVARIANTS PASSED! <<");
+            System.out.println("================================================================================");
+            System.exit(0);
         } else {
             System.err.println(">> ONE OR MORE SIMULATION INVARIANT CHECKS FAILED! <<");
             System.exit(1);
         }
-        System.out.println("================================================================================");
     }
 
     private static boolean testAgentSpatialBoundaryInvariant() {

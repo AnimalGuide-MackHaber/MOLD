@@ -186,5 +186,6 @@ public class MoldReverbModTest {
         System.out.println("================================================================================");
         System.out.println(">> ALL REVERB BIO-MODULATION & MIDI ROUTING TESTS PASSED! <<");
         System.out.println("================================================================================");
+        System.exit(0);
     }
 }
