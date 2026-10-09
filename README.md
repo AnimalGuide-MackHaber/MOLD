@@ -107,3 +107,23 @@ Comprehensive conceptual and mathematical documentation is located in the `docs/
 2. [docs/AUDIO.md](docs/AUDIO.md): Synthesis architecture, 3D binaural spatialization, Moore-neighborhood VCA drive, UP-OLA partitioned convolution, and dynamics limiting.
 3. [docs/MIDI.md](docs/MIDI.md): Akai MIDImix and Novation Launchpad Mini MIDI specifications, mapping tables, radial ripples, and trilateral LED protocols.
 4. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): Multi-threaded lifecycle, OpenGL thread affinity, thread safety, and data flow.
+
+---
+
+## AI Coding Agent Skills (Antigravity & Claude Code)
+
+This repository includes tailored, production-ready workspace skills and rule files for AI coding assistants. When cloned, the repository is automatically pre-configured for both **Google Antigravity** and **Claude Code**:
+
+| Skill Name | Path (`.agents/skills/` & `.claude/skills/`) | Focus Area |
+| :--- | :--- | :--- |
+| **`processing-opengl-sim`** | `processing-opengl-sim/SKILL.md` | PImage texture feeding, avoiding PGraphics JOGL cache resets, CPU hot paths, and 3-sensor slime mold steering. |
+| **`processing-threading-lifecycle`** | `processing-threading-lifecycle/SKILL.md` | Processing PDE class concatenation, JOGL OpenGL thread affinity, deferred execution patterns, and macOS display stability. |
+| **`realtime-audio-dsp`** | `realtime-audio-dsp/SKILL.md` | Biquad algebraic saturation, numerical stability, algorithmic velvet noise convolution, dynamic bio-modulation ceilings, and master bus limiting. |
+| **`hardware-midi-telemetry`** | `hardware-midi-telemetry/SKILL.md` | Novation Launchpad Mini [MK3] & Akai MIDImix protocols, batch SysEx RGB lighting, perimeter CCs, and Trilateral Color Telemetry. |
+| **`offline-dsp-verification`** | `offline-dsp-verification/SKILL.md` | Headless automated verification with Processing `core.jar`, DSP invariant assertions, and CI regression testing. |
+| **`web-audio-sim-porting`** | `web-audio-sim-porting/SKILL.md` | Web Audio API / HTML5 Canvas porting, shader-to-CPU value scaling ($255\times$), tick rate matching, and harmonic grid math. |
+
+### Configuration Files
+- **Antigravity**: [`GEMINI.md`](GEMINI.md), [`AGENTS.md`](AGENTS.md), and [`.agents/skills/`](.agents/skills/) (with [`.agent`](.agent) symlink).
+- **Claude Code**: [`CLAUDE.md`](CLAUDE.md) and [`.claude/skills/`](.claude/skills/).
+

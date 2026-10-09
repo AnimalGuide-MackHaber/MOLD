@@ -37,3 +37,23 @@ echo ""
 echo "Running MoldHeadlessSmokeTest..."
 "$JAVA" -Djava.awt.headless=true -cp "tests/build/bench:$CORE" MoldHeadlessSmokeTest
 
+echo ""
+echo "Verifying Antigravity and Claude Code skills parity..."
+diff -r .agents/skills .claude/skills
+python3 -c '
+import os
+for base in [".agents/skills", ".claude/skills"]:
+    assert os.path.isdir(base), f"Missing {base}"
+    skills = [d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))]
+    assert len(skills) >= 6, f"Expected at least 6 skills in {base}, got {len(skills)}"
+    for s in skills:
+        skill_file = os.path.join(base, s, "SKILL.md")
+        assert os.path.isfile(skill_file), f"Missing SKILL.md in {skill_file}"
+        with open(skill_file) as f:
+            content = f.read()
+        assert content.startswith("---"), f"{skill_file} missing YAML frontmatter"
+        assert f"name: {s}" in content, f"{skill_file} name mismatch"
+        assert "description:" in content, f"{skill_file} missing description"
+print(">> ALL ANTIGRAVITY & CLAUDE CODE SKILLS VALIDATED & IN SYNC! <<")
+'
+

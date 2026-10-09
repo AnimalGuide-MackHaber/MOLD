@@ -57,3 +57,13 @@
 - **Simulation Tick Rate Matching**: The WebApp's `requestAnimationFrame` loop must increment its `speedAccumulator` identically to the Processing `draw()` loop (e.g. `speedAccumulator += CONFIG.simSpeed * 0.4`). A lower multiplier will cause sluggishness and mismatched decay rendering.
 - **Harmonic Grid Scaling Math**: The musical grid shifts one octave every *two* rows (`Math.floor(invertedRow / 2)`). Additionally, maintain a baseline of `baseOctave = 1` (shifting the 55Hz A1 root) to prevent the "NORMAL" setting from scaling up into ultrasonic (>20kHz) ranges.
 - **HTML Script Patching Safety**: When modifying `<script>` logic via regex or string replacement, ALWAYS extract the code and verify it with `node -c` to catch syntax errors (like broken brackets or rogue `} else {` tokens) before considering the patch successful. Ensure all dynamically added UI elements have properly attached `addEventListener` bindings.
+
+## 9. Workspace Skills
+The repository includes dedicated workspace skills located in `.agents/skills/` (mirrored in `.agent/skills/` and `.claude/skills/`):
+- `processing-opengl-sim`: Processing OpenGL, PImage shader feeding, simulation CPU arrays, agent bioenergetics.
+- `processing-threading-lifecycle`: Processing PDE architecture, JOGL threading purity, deferred execution, macOS window stability.
+- `realtime-audio-dsp`: Real-time DSP stability, velvet noise reverb, partitioned convolution, 3D spatialization, saturation & limiting.
+- `hardware-midi-telemetry`: Hardware MIDI controller integration, Launchpad MK3 protocols, SysEx RGB, Trilateral Color telemetry, MIDImix.
+- `offline-dsp-verification`: Offline testing without hardware/display, `pde_to_java.py`, Processing headless harness, DSP invariant assertion.
+- `web-audio-sim-porting`: Porting Processing/Java DSP & simulation to Web Audio/HTML5 Canvas, tick rate matching, shader-to-CPU scaling, harmonic grid math.
+
