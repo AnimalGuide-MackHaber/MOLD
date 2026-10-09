@@ -56,17 +56,15 @@ public class VelvetImpulseGenerator {
         generateChannel(irR, preDelaySamples, totalSamples, sampleRate, t60,
                         densityInitial, densityMax, highDamping, seed ^ 0x5DEECE66DL);
 
-        // 6. Normalize peak gain to -3dBFS (10^(-3/20) ~ 0.70710678)
-        float maxPeak = 0.0f;
+        // 6. Normalize IR energy (L2 norm) to calibrated studio reverberant headroom (-3dBFS ~ 0.7071)
+        double sumSq = 0.0;
         for (int i = 0; i < totalLength; i++) {
-            float absL = Math.abs(irL[i]);
-            if (absL > maxPeak) maxPeak = absL;
-            float absR = Math.abs(irR[i]);
-            if (absR > maxPeak) maxPeak = absR;
+            sumSq += (double)irL[i] * irL[i] + (double)irR[i] * irR[i];
         }
+        double l2Norm = Math.sqrt(sumSq * 0.5); // Average per-channel L2 energy
 
-        if (maxPeak > 1e-7f) {
-            float normScale = 0.70710678f / maxPeak;
+        if (l2Norm > 1e-7) {
+            float normScale = (float) (0.70710678 / l2Norm);
             for (int i = 0; i < totalLength; i++) {
                 irL[i] *= normScale;
                 irR[i] *= normScale;

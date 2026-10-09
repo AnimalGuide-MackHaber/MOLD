@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Physarum Bio-Sonification Synthesizer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <style>
+    body {
+      background-color: #090a0f;
+      color: #d1d5db;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      touch-action: manipulation;
+      margin: 0;
+      overflow: hidden; /* Prevent body scroll, handle in flex containers */
+    }
+    /* Crisp rendering for the simulation pixel array */
+    canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    input[type=range] {
+      accent-color: #06b6d4;
+    }
+    .accordion-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.25s cubic-bezier(0, 1, 0, 1);
+    }
+    .accordion-content.expanded {
+      max-height: 1200px;
+      transition: max-height 0.35s ease-in-out;
+    }
+    /* Custom scrollbar for drawer */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #111111; 
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #333333; 
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #555; 
+    }
+  </style>
+</head>
+<body class="h-screen w-screen flex flex-col md:flex-row">
+
+  <!-- Left: Main Simulation Viewport -->
+  <main class="flex-1 flex flex-col items-center justify-start p-2 sm:p-4 min-w-0 h-full overflow-hidden relative">
+    
+    <!-- Top HUD -->
+    <div class="w-full max-w-[760px] flex items-center justify-between py-2 px-1 border-b border-neutral-800 text-xs z-10 shrink-0">
+      <div class="flex items-center gap-3">
+        <span class="font-bold tracking-wider text-neutral-100">PHYSARUM // VCA BIO-SYNTH</span>
+        <span id="fps-display" class="font-mono text-emerald-400">0 FPS</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="agent-display" class="font-mono text-neutral-300">Agents: 0</span>
+        <span id="midi-status" class="px-2 py-0.5 rounded text-[10px] font-mono bg-neutral-800 text-neutral-500 transition-colors">MIDI OFF</span>
+      </div>
+    </div>
+
+    <!-- Canvas Mount Container -->
+    <div id="canvas-container" class="relative w-full max-w-[760px] flex-1 min-h-0 my-2 rounded border border-neutral-800 bg-[#101012] flex items-center justify-center overflow-hidden">
+      <!-- p5 canvas injected here -->
+    </div>
+
+    <!-- Transport Strip -->
+    <div class="w-full max-w-[760px] grid grid-cols-6 gap-2 text-xs shrink-0 pb-2">
+      <button id="btn-engine-toggle" class="py-2 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-semibold border border-neutral-700 transition-colors">Pause</button>
+      <button id="btn-clear-food" class="py-2 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-semibold border border-neutral-700 transition-colors">Clear Food</button>
+      <button id="btn-seed-food" class="py-2 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-semibold border border-neutral-700 transition-colors">Scatter Oats</button>
+      <button id="btn-reinoculate" class="py-2 rounded bg-yellow-900/40 hover:bg-yellow-800/60 text-yellow-300 font-semibold border border-yellow-700/50 transition-colors">Reinoculate</button>
+      <button id="btn-fullscreen" class="py-2 rounded bg-cyan-900/40 hover:bg-cyan-800/60 text-cyan-300 font-semibold border border-cyan-700/50 transition-colors">Full Screen</button>
+      <button id="btn-audio-toggle" class="py-2 rounded bg-amber-900/40 hover:bg-amber-800/60 text-amber-300 font-semibold border border-amber-700/50 transition-colors">Audio: OFF</button>
+    </div>
+  </main>
+
+  <!-- Right: Control Drawer -->
+  <aside class="w-full md:w-[380px] lg:w-[420px] bg-neutral-900/95 border-t md:border-t-0 md:border-l border-neutral-800 flex flex-col h-[40vh] md:h-full overflow-y-auto shrink-0 shadow-[-10px_0_30px_rgba(0,0,0,0.5)] z-20">
+    
+    <!-- Pinned Parameter: Master Simulation Speed -->
+    <div class="p-4 border-b border-neutral-800 bg-neutral-950 sticky top-0 z-30">
+      <div class="flex justify-between items-center mb-1 text-xs">
+        <label for="slider-speed" class="font-bold text-neutral-200 uppercase tracking-wide">Simulation Speed</label>
+        <span id="lbl-speed" class="font-mono text-cyan-400 font-semibold">1.00x</span>
+      </div>
+      <input id="slider-speed" type="range" min="0.1" max="30.0" step="0.1" value="1.0" class="w-full h-1.5 bg-neutral-800 rounded cursor-pointer">
+      
+      <div class="flex justify-between items-center mt-3 mb-1 text-xs">
+        <label for="slider-agents" class="font-bold text-neutral-200 uppercase tracking-wide">Target Agent Count</label>
+        <span id="lbl-agents" class="font-mono text-cyan-400 font-semibold">8000</span>
+      </div>
+      <input id="slider-agents" type="range" min="1000" max="64000" step="100" value="8000" class="w-full h-1.5 bg-neutral-800 rounded cursor-pointer">
+    </div>
+
+    <!-- Accordion Sections (All collapsed on initialize) -->
+    <div class="divide-y divide-neutral-800 text-xs">
+
+      <!-- 1. Hardware MIDI Link (Launchpad & MIDImix) -->
+      <section class="accordion-group">
+        <button class="w-full py-3 px-4 flex justify-between items-center text-left font-semibold text-neutral-300 hover:bg-neutral-800/40" onclick="handleAccordionToggle(this)">
+          <span class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+            Hardware MIDI Link
+          </span>
+          <span class="accordion-icon text-neutral-500 transform transition-transform duration-200">▼</span>
+        </button>
+        <div class="accordion-content px-4 pb-4 space-y-3">
+          <div class="flex items-center justify-between pt-2">
+            <label for="chk-midi-active" class="text-neutral-300">Enable Hardware Link</label>
+            <input type="checkbox" id="chk-midi-active" class="w-4 h-4 rounded bg-neutral-800 border-neutral-700">
+          </div>
+          <div id="midi-error-msg" class="hidden text-rose-400 text-[11px] bg-rose-900/20 p-2 rounded border border-rose-800/50">
+            Web MIDI not supported in this browser. Try Chrome/Edge.
+          </div>
+          <div>
+            <label class="block text-[11px] text-neutral-400 mb-1">MIDI Input Port</label>
+            <select id="sel-midi-in" class="w-full p-1.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-200 font-mono text-[11px] outline-none">
+              <option value="">(Select Input Device)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] text-neutral-400 mb-1">MIDI Output Port</label>
+            <select id="sel-midi-out" class="w-full p-1.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-200 font-mono text-[11px] outline-none">
+              <option value="">(Select Output Device)</option>
+            </select>
+          </div>
+          <div class="text-[11px] text-neutral-400 space-y-1 bg-neutral-950 p-2 rounded border border-neutral-800">
+            <p><strong>Launchpad (11–88):</strong> Drop oats. <strong>MIDImix:</strong> Faders/knobs control params.</p>
+            <p><strong>Amber/Yellow LEDs:</strong> Proportional to remaining food mass.</p>
+            <p><strong>Green/Cyan LEDs:</strong> Live heatmap of slime biomass.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Synthesis & Harmonization -->
+      <section class="accordion-group">
+        <button class="w-full py-3 px-4 flex justify-between items-center text-left font-semibold text-neutral-300 hover:bg-neutral-800/40" onclick="handleAccordionToggle(this)">
+          <span class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+            Harmonizer & Scale Matrix
+          </span>
+          <span class="accordion-icon text-neutral-500 transform transition-transform duration-200">▼</span>
+        </button>
+        <div class="accordion-content px-4 pb-4 space-y-3">
+          <div class="grid grid-cols-3 gap-2 pt-2">
+            <div>
+              <label class="block text-[11px] text-neutral-400 mb-1">Octave Shift</label>
+              <select id="sel-octave-shift" class="w-full p-1.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-200 outline-none">
+                <option value="-1">-1 OCT</option>
+                <option value="0" selected>NORMAL</option>
+                <option value="1">+1 OCT</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] text-neutral-400 mb-1">Root Key</label>
+              <select id="sel-root-note" class="w-full p-1.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-200 outline-none">
+                <option value="0">C</option>
+                <option value="1">C# / Db</option>
+                <option value="2">D</option>
+                <option value="3">D# / Eb</option>
+                <option value="4">E</option>
+                <option value="5">F</option>
+                <option value="6">F# / Gb</option>
+                <option value="7">G</option>
+                <option value="8">G# / Ab</option>
+                <option value="9" selected>A</option>
+                <option value="10">A# / Bb</option>
+                <option value="11">B</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] text-neutral-400 mb-1">Consonant Scale</label>
+              <select id="sel-scale-type" class="w-full p-1.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-200 outline-none">
+                <option value="major_pentatonic" selected>Major Pentatonic</option>
+                <option value="minor_pentatonic">Minor Pentatonic</option>
+                <option value="lydian">Lydian</option>
+                <option value="dorian">Dorian</option>
+                <option value="hirajoshi">Hirajoshi</option>
+                <option value="just_intonation">Pure Harmonics (Just)</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-[11px] text-neutral-400 mb-1">Oscillator Waveform</label>
+            <div class="grid grid-cols-4 gap-1">
+              <button class="btn-wave-sel py-1 rounded bg-cyan-950 text-cyan-300 border border-cyan-700 font-mono transition-colors" data-wave="triangle">TRI</button>
+              <button class="btn-wave-sel py-1 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 font-mono transition-colors" data-wave="sine">SIN</button>
+              <button class="btn-wave-sel py-1 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 font-mono transition-colors" data-wave="sawtooth">SAW</button>
+              <button class="btn-wave-sel py-1 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 font-mono transition-colors" data-wave="square">SQR</button>
+            </div>
+          </div>
+          <div class="flex items-center justify-between pt-1">
+            <label for="chk-show-overlay" class="text-neutral-400">Show 8x8 Matrix HUD</label>
+            <input type="checkbox" id="chk-show-overlay" class="w-4 h-4 rounded bg-neutral-800 border-neutral-700">
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Dynamic Filter & Adjacent VCA -->
+      <section class="accordion-group">
+        <button class="w-full py-3 px-4 flex justify-between items-center text-left font-semibold text-neutral-300 hover:bg-neutral-800/40" onclick="handleAccordionToggle(this)">
+          <span class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            Dynamic LPF & Adjacent VCA
+          </span>
+          <span class="accordion-icon text-neutral-500 transform transition-transform duration-200">▼</span>
+        </button>
+        <div class="accordion-content px-4 pb-4 space-y-3">
+          <div class="pt-2">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">LPF Cutoff Sensitivity (Food Size)</span>
+              <span id="lbl-lpf-sens" class="font-mono text-cyan-400">1.2x</span>
+            </div>
+            <input id="slider-lpf-sens" type="range" min="0.2" max="3.0" step="0.1" value="1.2" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Filter Resonance (Q)</span>
+              <span id="lbl-lpf-q" class="font-mono text-cyan-400">4.5</span>
+            </div>
+            <input id="slider-lpf-q" type="range" min="0.5" max="18.0" step="0.5" value="4.5" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Moore Neighborhood VCA Gain</span>
+              <span id="lbl-vca-sens" class="font-mono text-cyan-400">1.0x</span>
+            </div>
+            <input id="slider-vca-sens" type="range" min="0.2" max="3.0" step="0.1" value="1.0" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+            <span class="text-[10px] text-neutral-500 block mt-1 leading-tight">Volume modulated by slime density in the 8 adjacent cells surrounding the food.</span>
+          </div>
+        </div>
+      </section>
+
+            <!-- 4. Velvet Convolver Reverb -->
+      <section class="accordion-group">
+        <button class="w-full py-3 px-4 flex justify-between items-center text-left font-semibold text-neutral-300 hover:bg-neutral-800/40" onclick="handleAccordionToggle(this)">
+          <span class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-pink-400"></span>
+            Velvet Convolver Reverb
+          </span>
+          <span class="accordion-icon text-neutral-500 transform transition-transform duration-200">▼</span>
+        </button>
+        <div class="accordion-content px-4 pb-4 space-y-3">
+          <div class="flex items-center justify-between pt-2">
+            <label for="chk-reverb-active" class="text-neutral-300">Enable Reverb</label>
+            <input type="checkbox" id="chk-reverb-active" class="w-4 h-4 rounded bg-neutral-800 border-neutral-700" checked>
+          </div>
+          <div class="flex items-center justify-between">
+            <label for="chk-biomod-active" class="text-neutral-300">Bio-Modulation</label>
+            <input type="checkbox" id="chk-biomod-active" class="w-4 h-4 rounded bg-neutral-800 border-neutral-700" checked>
+          </div>
+          <div class="pt-2">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Reverb Wet Mix</span>
+              <span id="lbl-rev-wet" class="font-mono text-cyan-400">0.50</span>
+            </div>
+            <input id="slider-rev-wet" type="range" min="0.0" max="1.0" step="0.02" value="0.50" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Reverb Dry Mix</span>
+              <span id="lbl-rev-dry" class="font-mono text-cyan-400">0.80</span>
+            </div>
+            <input id="slider-rev-dry" type="range" min="0.0" max="1.0" step="0.02" value="0.80" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Decay Time (T60)</span>
+              <span id="lbl-rev-t60" class="font-mono text-cyan-400">3.5s</span>
+            </div>
+            <input id="slider-rev-t60" type="range" min="0.5" max="8.0" step="0.1" value="3.5" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">High Damping</span>
+              <span id="lbl-rev-damp" class="font-mono text-cyan-400">0.45</span>
+            </div>
+            <input id="slider-rev-damp" type="range" min="0.05" max="0.95" step="0.05" value="0.45" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Pre-Delay</span>
+              <span id="lbl-rev-pre" class="font-mono text-cyan-400">0.015s</span>
+            </div>
+            <input id="slider-rev-pre" type="range" min="0.005" max="0.060" step="0.005" value="0.015" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+          <button id="btn-regen-ir" class="w-full py-1.5 mt-2 rounded bg-yellow-900/40 text-yellow-300 border border-yellow-700/50 hover:bg-yellow-800/60 transition-colors">Regenerate IR Seed</button>
+        </div>
+      </section>
+
+      <!-- 5. Bioenergetics & Tendril Parameters -->
+      <section class="accordion-group">
+        <button class="w-full py-3 px-4 flex justify-between items-center text-left font-semibold text-neutral-300 hover:bg-neutral-800/40" onclick="handleAccordionToggle(this)">
+          <span class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-violet-400"></span>
+            Bioenergetics & Tendril Reach
+          </span>
+          <span class="accordion-icon text-neutral-500 transform transition-transform duration-200">▼</span>
+        </button>
+        <div class="accordion-content px-4 pb-4 space-y-3">
+          <div class="pt-2">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Tendril Reach (Sensor Distance)</span>
+              <span id="lbl-sensor-dist" class="font-mono text-cyan-400">40 px</span>
+            </div>
+            <input id="slider-sensor-dist" type="range" min="6" max="160" step="1" value="40" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Basal Metabolic Rate</span>
+              <span id="lbl-bmr" class="font-mono text-cyan-400">0.0100</span>
+            </div>
+            <input id="slider-bmr" type="range" min="0.001" max="0.050" step="0.001" value="0.010" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Locomotion Exploration Cost</span>
+              <span id="lbl-loco" class="font-mono text-cyan-400">0.0180</span>
+            </div>
+            <input id="slider-loco" type="range" min="0.002" max="0.080" step="0.001" value="0.018" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Visual Palettes -->
+      <section class="accordion-group">
+        <button class="w-full py-3 px-4 flex justify-between items-center text-left font-semibold text-neutral-300 hover:bg-neutral-800/40" onclick="handleAccordionToggle(this)">
+          <span class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-neutral-400"></span>
+            Color Palette
+          </span>
+          <span class="accordion-icon text-neutral-500 transform transition-transform duration-200">▼</span>
+        </button>
+        <div class="accordion-content px-4 pb-4 space-y-2">
+          <div class="grid grid-cols-3 gap-2 pt-2">
+            <button class="btn-palette-sel py-1.5 rounded bg-amber-500/20 text-amber-300 border border-amber-600/50 transition-colors" data-pal="yellow">Yellow Mold</button>
+            <button class="btn-palette-sel py-1.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 transition-colors" data-pal="mono">Grayscale</button>
+            <button class="btn-palette-sel py-1.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 transition-colors" data-pal="cyan">Bio Cyan</button>
+          </div>
+          <div class="pt-3 border-t border-neutral-800 mt-2">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Gradient / Sharp (On-Off)</span>
+              <span id="lbl-sharpness" class="font-mono text-cyan-400">0.0</span>
+            </div>
+            <input id="slider-sharpness" type="range" min="0.0" max="1.0" step="0.01" value="0.0" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+          <div class="pt-3 border-t border-neutral-800 mt-2">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Motion Blur Trails</span>
+              <span id="lbl-visual-blur" class="font-mono text-cyan-400">0.0 px</span>
+            </div>
+            <input id="slider-visual-blur" type="range" min="0.0" max="8.0" step="0.1" value="0.0" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </aside>
+
+  <script>
+    // --- UI Accoridion Logic ---
+    function handleAccordionToggle(buttonElement) {
+      const content = buttonElement.nextElementSibling;
+      const arrow = buttonElement.querySelector('.accordion-icon');
+      const isOpen = content.classList.contains('expanded');
+
+      // Close all
+      document.querySelectorAll('.accordion-content').forEach(c => c.classList.remove('expanded'));
+      document.querySelectorAll('.accordion-icon').forEach(a => a.style.transform = 'rotate(0deg)');
+
+      // Open target
+      if (!isOpen) {
+        content.classList.add('expanded');
+        arrow.style.transform = 'rotate(180deg)';
+      }
+    }
+
+    // --- Global Application State & Configuration ---
+    const CONFIG = {
+      simSpeed: 1.0,
+      gridDim: 8,
+      worldDim: 256,
+      sensorDist: 40.0,
+      sensorAngle: 0.61,
+      turnAngle: 0.384,
+      stepSize: 1.0,
+      decayFactor: 0.965,
+      diffuseRate: 0.45,
+      bmr: 0.010,
+      locomotionCost: 0.018,
+      mitosisThreshold: 75.0,
+      maxAgents: 32000,
+      initialAgents: 8000,
+      targetAgentCount: 8000,
+      octaveShift: 0,
+      visualBlur: 0.0,
+      reverbWet: 0.50,
+      reverbDry: 0.80,
+      reverbT60: 3.5,
+      reverbHighDamping: 0.45,
+      reverbPreDelay: 0.015,
+      reverbEnabled: true,
+      autoModulateReverb: true,
+      visualSharpness: 0.0,
+      lpfSens: 1.2,
+      lpfQ: 4.5,
+      vcaSens: 1.0,
+      rootNote: 9, // 'A'
+      scaleType: 'major_pentatonic',
+      waveform: 'triangle',
+      showGridOverlay: false,
+      palette: 'yellow'
+    };
+
+    let agents = [];
+    let trailMap, nextTrailMap;
+    let foodSources = [];
+    let cellBiomass = new Float32Array(64);
+    let isRunning = true;
+    let audioCtx = null;
+    let masterGain = null;
+    let isAudioActive = false;
+
+    // --- Web MIDI State (Launchpad) ---
+    let midiAccess = null;
+    let midiIn = null;
+    let midiOut = null;
+    let midiEnabled = false;
+    let padDirtyBuffer = new Uint8Array(64).fill(255);
+    let lastMidiFlushTime = 0;
+
+    // --- STREAMING_CHUNK:Implementing Music Theory matrices and frequencies ---
+    const SCALE_INTERVALS = {
+      major_pentatonic: [0, 2, 4, 7, 9],
+      minor_pentatonic: [0, 3, 5, 7, 10],
+      lydian: [0, 2, 4, 6, 7, 9, 11],
+      dorian: [0, 2, 3, 5, 7, 9, 10],
+      hirajoshi: [0, 2, 3, 7, 8],
+      just_intonation: [1.0, 9/8, 5/4, 4/3, 3/2, 5/3, 15/8] // Microtonal ratios
+    };
+
+    function getCellFrequency(col, row) {
+      const invertedRow = 7 - row;
+      const gridOctaveShift = Math.floor(invertedRow / 2);
+      const userOctaveShift = parseInt(CONFIG.octaveShift, 10);
+      const baseOctave = 1; // User requested -1 octave shift overall
+      const oct = baseOctave + gridOctaveShift + userOctaveShift;
+      const subOffset = (invertedRow % 2 === 1) ? 1.5 : 1.0;
+
+      if (CONFIG.scaleType !== 'just_intonation') {
+        const degs = SCALE_INTERVALS[CONFIG.scaleType];
+        const semitone = degs[col % degs.length];
+        const totalSemitone = (oct * 12) + parseInt(CONFIG.rootNote, 10) + semitone;
+        const freq = 440.0 * Math.pow(2.0, (totalSemitone - 57) / 12.0) * subOffset;
+        return isNaN(freq) ? 110.0 : freq;
+      } else {
+        const baseF = 55.0 * Math.pow(2.0, oct - 1) * Math.pow(2.0, parseInt(CONFIG.rootNote, 10) / 12.0);
+        const ratios = SCALE_INTERVALS.just_intonation;
+        const freq = baseF * ratios[col % ratios.length] * subOffset;
+        return isNaN(freq) ? 110.0 : freq;
+      }
+    }
+
+    // --- STREAMING_CHUNK:Building Voice, VCA, and Filter DSP logic for Food Nodes ---
+    class FoodAudioVoice {
+      constructor(food) {
+        this.food = food;
+        if (!audioCtx) return;
+
+        // Signal Chain: Osc -> LPF -> Gate (Feeding) -> VCA (Adjacent Mass) -> Master
+        this.osc = audioCtx.createOscillator();
+        this.filter = audioCtx.createBiquadFilter();
+        this.gate = audioCtx.createGain();
+        this.vca = audioCtx.createGain();
+
+        this.osc.type = CONFIG.waveform;
+        this.osc.frequency.setValueAtTime(getCellFrequency(food.gridCol, food.gridRow), audioCtx.currentTime);
+
+        this.filter.type = 'lowpass';
+        this.filter.Q.setValueAtTime(CONFIG.lpfQ, audioCtx.currentTime);
+        this.filter.frequency.setValueAtTime(80, audioCtx.currentTime);
+
+        this.gate.gain.setValueAtTime(0.0, audioCtx.currentTime);
+        this.vca.gain.setValueAtTime(0.0, audioCtx.currentTime);
+
+        this.osc.connect(this.filter);
+        this.filter.connect(this.gate);
+        this.gate.connect(this.vca);
+        this.vca.connect(reverbDryGain);
+      if (reverbConvolver) this.vca.connect(reverbConvolver);
+        
+        try { this.osc.start(); } catch(e) {}
+      }
+
+      update(adjacentMass, isFeeding) {
+        if (!audioCtx || !this.osc) return;
+        const now = audioCtx.currentTime;
+
+        // Dynamic Filter: Sweeps down as food is consumed
+        const massRatio = Math.max(0.0, this.food.mass / this.food.initialMass);
+        const targetCutoff = 80 + (massRatio * 2800 * CONFIG.lpfSens);
+        this.filter.frequency.setTargetAtTime(targetCutoff, now, 0.05);
+        this.filter.Q.setTargetAtTime(CONFIG.lpfQ, now, 0.05);
+
+        // Gate: Opens when agent is actively biting
+        this.gate.gain.setTargetAtTime(isFeeding ? 0.35 : 0.0, now, 0.08);
+
+        // VCA: Modulated by total slime mass in the 8 adjacent cells
+        const vcaLevel = Math.min(adjacentMass * CONFIG.vcaSens, 1.0);
+        this.vca.gain.setTargetAtTime(vcaLevel, now, 0.08);
+      }
+
+      destroy() {
+        if (!audioCtx || !this.osc) return;
+        const now = audioCtx.currentTime;
+        try {
+          this.vca.gain.setTargetAtTime(0, now, 0.04);
+          setTimeout(() => {
+            if(this.osc) {
+                this.osc.stop();
+                this.osc.disconnect();
+            }
+          }, 50);
+        } catch (e) {}
+      }
+    }
+
+    class FoodNodule {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 8.0 + Math.random() * 16.0;
+        this.initialMass = this.radius * this.radius * 2.0;
+        this.mass = this.initialMass;
+        this.gridCol = Math.floor((this.x / CONFIG.worldDim) * CONFIG.gridDim);
+        this.gridRow = Math.floor((this.y / CONFIG.worldDim) * CONFIG.gridDim);
+        this.isFeeding = false;
+        this.voice = new FoodAudioVoice(this);
+      }
+
+      update(adjacentMass) {
+        this.voice.update(adjacentMass, this.isFeeding);
+        this.isFeeding = false; // Reset for next frame
+      }
+
+      destroy() {
+        this.voice.destroy();
+      }
+    }
+
+    // Sums biomass in the 8 surrounding cells
+    function calculateMooreBiomass(col, row) {
+      let sum = 0;
+      for (let dc = -1; dc <= 1; dc++) {
+        for (let dr = -1; dr <= 1; dr++) {
+          if (dc === 0 && dr === 0) continue;
+          const c = col + dc;
+          const r = row + dr;
+          if (c >= 0 && c < CONFIG.gridDim && r >= 0 && r < CONFIG.gridDim) {
+            sum += cellBiomass[r * CONFIG.gridDim + c];
+          }
+        }
+      }
+      return sum;
+    }
+
+    // --- STREAMING_CHUNK:Coding Agent sensing, locomotion, and trail deposition ---
+    class Agent {
+      constructor(x, y, angle) {
+        this.x = x;
+        this.y = y;
+        this.angle = angle;
+        this.energy = 1.0;
+      }
+    }
+
+    // Main P5 Instance
+    new p5((p) => {
+      let pixelBuffer;
+      let containerResizeObserver;
+
+      p.setup = () => {
+        const container = document.getElementById('canvas-container');
+        const d = Math.min(container.clientWidth, container.clientHeight);
+        const canvas = p.createCanvas(d, d);
+        canvas.parent('canvas-container');
+        p.pixelDensity(1);
+        p.noSmooth();
+
+        trailMap = new Float32Array(CONFIG.worldDim * CONFIG.worldDim);
+        nextTrailMap = new Float32Array(CONFIG.worldDim * CONFIG.worldDim);
+        pixelBuffer = p.createImage(CONFIG.worldDim, CONFIG.worldDim);
+
+        resetColony();
+
+        // Responsive resize
+        containerResizeObserver = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                const w = entry.contentRect.width;
+                const h = entry.contentRect.height;
+                const size = Math.min(w, h);
+                p.resizeCanvas(size, size);
+            }
+        });
+        containerResizeObserver.observe(container);
+      };
+
+      function resetColony() {
+        agents = [];
+        foodSources.forEach(f => f.destroy());
+        foodSources = [];
+        trailMap.fill(0);
+        nextTrailMap.fill(0);
+
+        const cx = CONFIG.worldDim / 2;
+        const cy = CONFIG.worldDim / 2;
+        for (let i = 0; i < CONFIG.initialAgents; i++) {
+          const r = Math.random() * 14;
+          const th = Math.random() * Math.PI * 2;
+          agents.push(new Agent(cx + Math.cos(th) * r, cy + Math.sin(th) * r, Math.random() * Math.PI * 2));
+        }
+
+        spawnNoduleInGrid(2, 2);
+        spawnNoduleInGrid(5, 2);
+        spawnNoduleInGrid(4, 5);
+      }
+
+      function sampleTrail(x, y) {
+        const ix = Math.floor(x);
+        const iy = Math.floor(y);
+        if (ix < 0 || ix >= CONFIG.worldDim || iy < 0 || iy >= CONFIG.worldDim) return 0;
+        return trailMap[iy * CONFIG.worldDim + ix];
+      }
+
+
+      function stepModel() {
+        cellBiomass.fill(0);
+
+        // Population Control
+        const popDiff = agents.length - CONFIG.targetAgentCount;
+        if (popDiff > 0) {
+          agents.splice(agents.length - Math.min(popDiff, 500));
+        } else if (popDiff < 0 && agents.length > 0) {
+          const spawnCount = Math.min(-popDiff, 500);
+          for (let i = 0; i < spawnCount; i++) {
+            if (agents.length >= CONFIG.maxAgents) break;
+            const srcIdx = Math.floor(Math.random() * agents.length);
+            const parent = agents[srcIdx];
+            agents.push(new Agent(parent.x + (Math.random()*4-2), parent.y + (Math.random()*4-2), Math.random() * Math.PI * 2));
+            agents[agents.length-1].energy = 40.0;
+          }
+        }
+
+        const grazeGain = 0.015 * 8.0; // grazingRate * assimilationYield
+        
+        for (let i = agents.length - 1; i >= 0; i--) {
+          const ag = agents[i];
+          ag.energy -= CONFIG.bmr;
+
+          const lTh = ag.angle - CONFIG.sensorAngle;
+          const rTh = ag.angle + CONFIG.sensorAngle;
+          const fTh = ag.angle;
+
+          const sL = sampleTrail(ag.x + Math.cos(lTh) * CONFIG.sensorDist, ag.y + Math.sin(lTh) * CONFIG.sensorDist);
+          const sF = sampleTrail(ag.x + Math.cos(fTh) * CONFIG.sensorDist, ag.y + Math.sin(fTh) * CONFIG.sensorDist);
+          const sR = sampleTrail(ag.x + Math.cos(rTh) * CONFIG.sensorDist, ag.y + Math.sin(rTh) * CONFIG.sensorDist);
+
+          if (sF > sL && sF > sR) {
+            ag.angle += (Math.random() * 0.08 - 0.04);
+          } else if (sL > sR) {
+            ag.angle -= (CONFIG.turnAngle + (Math.random() * 0.06 - 0.03));
+          } else if (sR > sL) {
+            ag.angle += (CONFIG.turnAngle + (Math.random() * 0.06 - 0.03));
+          } else {
+            ag.angle += (Math.random() * 0.8 - 0.4);
+          }
+
+          if (ag.energy < 28.0) {
+            ag.angle += (Math.random() * 0.7 - 0.35);
+          }
+          
+          if (ag.angle < 0) ag.angle += Math.PI * 2;
+          else if (ag.angle >= Math.PI * 2) ag.angle -= Math.PI * 2;
+
+          const localTrail = sampleTrail(ag.x, ag.y);
+          const territoryCost = Math.max(0.25, 1.0 - (localTrail * (1.0 / 80.0)));
+          ag.energy -= CONFIG.locomotionCost * territoryCost;
+
+          let nx = ag.x + Math.cos(ag.angle) * CONFIG.stepSize;
+          let ny = ag.y + Math.sin(ag.angle) * CONFIG.stepSize;
+
+          if (nx < 0) nx += CONFIG.worldDim; else if (nx >= CONFIG.worldDim) nx -= CONFIG.worldDim;
+          if (ny < 0) ny += CONFIG.worldDim; else if (ny >= CONFIG.worldDim) ny -= CONFIG.worldDim;
+          
+          ag.x = nx;
+          ag.y = ny;
+
+          const px = Math.floor(ag.x);
+          const py = Math.floor(ag.y);
+          if (px >= 0 && px < CONFIG.worldDim && py >= 0 && py < CONFIG.worldDim) {
+            const idx = py * CONFIG.worldDim + px;
+            trailMap[idx] = Math.min(trailMap[idx] + 14.0, 255.0);
+
+            const c = Math.floor((px / CONFIG.worldDim) * CONFIG.gridDim);
+            const r = Math.floor((py / CONFIG.worldDim) * CONFIG.gridDim);
+            cellBiomass[r * CONFIG.gridDim + c] += 0.001;
+          }
+
+          let hitFood = false;
+          for (let f = 0; f < foodSources.length; f++) {
+            const food = foodSources[f];
+            const dx = ag.x - food.x;
+            const dy = ag.y - food.y;
+            if (dx * dx + dy * dy < food.radius * food.radius) {
+              hitFood = true;
+              ag.energy += grazeGain;
+              food.grazingBuffer += 0.015;
+              food.isFeeding = true;
+            }
+          }
+
+          if (ag.energy > CONFIG.mitosisThreshold && agents.length < CONFIG.maxAgents) {
+            ag.energy *= 0.48;
+            agents.push(new Agent(ag.x + (Math.random()*3-1.5), ag.y + (Math.random()*3-1.5), ag.angle + (Math.random()*2-1.0)));
+            agents[agents.length-1].energy = ag.energy;
+          }
+
+          if (ag.energy <= 0) {
+            agents[i] = agents[agents.length - 1];
+            agents.pop();
+          }
+        }
+
+        // 2. Manage Food Sources
+
+        for (let i = foodSources.length - 1; i >= 0; i--) {
+          const f = foodSources[i];
+          if (f.mass <= 0) {
+            // Quench Depleted Nodule Attractant Core
+            const fx = Math.floor(f.x);
+            const fy = Math.floor(f.y);
+            const clearR = Math.floor(f.radius * 1.5);
+            const rSqClear = clearR * clearR;
+            for (let dy = -clearR; dy <= clearR; dy++) {
+              for (let dx = -clearR; dx <= clearR; dx++) {
+                if (dx * dx + dy * dy <= rSqClear) {
+                  const tx = ((fx + dx) % CONFIG.worldDim + CONFIG.worldDim) % CONFIG.worldDim;
+                  const ty = ((fy + dy) % CONFIG.worldDim + CONFIG.worldDim) % CONFIG.worldDim;
+                  trailMap[ty * CONFIG.worldDim + tx] *= 0.25;
+                }
+              }
+            }
+            f.destroy();
+            foodSources.splice(i, 1);
+            continue;
+          }
+
+          // Inject attractant proportional to remaining mass
+          const massRatio = f.mass / f.initialMass;
+          const strength = 4.0 * massRatio;
+          const r = Math.floor(f.radius || 16);
+          const rSq = r * r;
+          
+          const x0 = Math.max(0, Math.floor(f.x - r));
+          const x1 = Math.min(CONFIG.worldDim - 1, Math.floor(f.x + r));
+          const y0 = Math.max(0, Math.floor(f.y - r));
+          const y1 = Math.min(CONFIG.worldDim - 1, Math.floor(f.y + r));
+
+          for (let py = y0; py <= y1; py++) {
+            const dy = py - f.y;
+            for (let px = x0; px <= x1; px++) {
+              const dx = px - f.x;
+              if (dx * dx + dy * dy <= rSq) {
+                const idx = py * CONFIG.worldDim + px;
+                trailMap[idx] = Math.min(255.0, trailMap[idx] + strength * 9.0);
+              }
+            }
+          }
+          const adj = calculateMooreBiomass(f.gridCol, f.gridRow);
+          f.update(adj);
+        }
+
+        // 3. Diffusion and Decay
+        const W = CONFIG.worldDim;
+        for (let y = 0; y < W; y++) {
+          const yTop = ((y === 0) ? W - 1 : y - 1) * W;
+          const yMid = y * W;
+          const yBtm = ((y === W - 1) ? 0 : y + 1) * W;
+
+          // Interior columns
+          for (let x = 1; x < W - 1; x++) {
+            const sum = trailMap[yTop + x - 1] + trailMap[yTop + x] + trailMap[yTop + x + 1] +
+                        trailMap[yMid + x - 1] +                      trailMap[yMid + x + 1] +
+                        trailMap[yBtm + x - 1] + trailMap[yBtm + x] + trailMap[yBtm + x + 1];
+            const result = (trailMap[yMid + x] * (1.0 - CONFIG.diffuseRate) + sum * 0.125 * CONFIG.diffuseRate) * CONFIG.decayFactor;
+            nextTrailMap[yMid + x] = (result > 1.275) ? result : 0.0;
+          }
+
+          // Edge columns wrap
+          for (let e = 0; e < 2; e++) {
+            const x = (e === 0) ? 0 : W - 1;
+            const xl = (x === 0) ? W - 1 : x - 1;
+            const xr = (x === W - 1) ? 0 : x + 1;
+            const sum = trailMap[yTop + xl] + trailMap[yTop + x] + trailMap[yTop + xr] +
+                        trailMap[yMid + xl] +                      trailMap[yMid + xr] +
+                        trailMap[yBtm + xl] + trailMap[yBtm + x] + trailMap[yBtm + xr];
+            const result = (trailMap[yMid + x] * (1.0 - CONFIG.diffuseRate) + sum * 0.125 * CONFIG.diffuseRate) * CONFIG.decayFactor;
+            nextTrailMap[yMid + x] = (result > 1.275) ? result : 0.0;
+          }
+        }
+        trailMap.set(nextTrailMap);
+      }
+
+      // --- STREAMING_CHUNK:Refining shrinking food visuals, fading attractant, and UI rendering ---
+      let speedAccumulator = 0.0;
+      p.draw = () => {
+        if (isRunning) {
+          speedAccumulator += CONFIG.simSpeed * 0.4; // 0.1x is baseline
+          while (speedAccumulator >= 1.0) {
+            stepModel();
+            speedAccumulator -= 1.0;
+          }
+
+        }
+
+        // Texture Render
+        const lerp = (a, b, t) => a + (b - a) * t;
+        const lerpColor = (c1, c2, t) => {
+          return [
+            lerp(c1[0], c2[0], t),
+            lerp(c1[1], c2[1], t),
+            lerp(c1[2], c2[2], t),
+            255
+          ];
+        };
+
+        pixelBuffer.loadPixels();
+        const d = pixelBuffer.pixels;
+        
+        let cBg, cAtrophy, cMargin, cSheet, cArtery;
+        if (CONFIG.palette === 'yellow') {
+          cBg = [6, 7, 10]; cAtrophy = [115, 65, 8]; cMargin = [161, 98, 7]; cSheet = [234, 179, 8]; cArtery = [254, 240, 138];
+        } else if (CONFIG.palette === 'mono') {
+          cBg = [6, 7, 10]; cAtrophy = [45, 45, 52]; cMargin = [95, 95, 105]; cSheet = [175, 175, 185]; cArtery = [245, 245, 250];
+        } else {
+          cBg = [6, 7, 10]; cAtrophy = [8, 30, 80]; cMargin = [6, 120, 160]; cSheet = [34, 211, 238]; cArtery = [207, 250, 254];
+        }
+
+        const fadeAlpha = p.map(CONFIG.visualBlur || 0, 0, 8.0, 255, 5);
+        p.noStroke();
+        p.fill(cBg[0], cBg[1], cBg[2], fadeAlpha);
+        p.rect(0, 0, p.width, p.height);
+
+        const cSharp = cArtery;
+        const s = CONFIG.visualSharpness || 0;
+        const moldCutoff = lerp(0.8, 0.4, s);
+        const cAtrophyActive = lerpColor(cAtrophy, cSharp, s);
+        const cMarginActive = lerpColor(cMargin, cSharp, s);
+        const cSheetActive = lerpColor(cSheet, cSharp, s);
+        const cArteryActive = cArtery;
+
+        for (let i = 0; i < trailMap.length; i++) {
+          const val = trailMap[i];
+          const px = i * 4;
+
+          if (val < moldCutoff) {
+            d[px] = cBg[0]; d[px+1] = cBg[1]; d[px+2] = cBg[2]; d[px+3] = 0; // transparent for blur
+          } else if (val < 4.0) {
+            d[px] = cAtrophyActive[0]; d[px+1] = cAtrophyActive[1]; d[px+2] = cAtrophyActive[2]; d[px+3] = 255;
+          } else if (val < 10.0) {
+            d[px] = cMarginActive[0]; d[px+1] = cMarginActive[1]; d[px+2] = cMarginActive[2]; d[px+3] = 255;
+          } else if (val < 30.0) {
+            d[px] = cSheetActive[0]; d[px+1] = cSheetActive[1]; d[px+2] = cSheetActive[2]; d[px+3] = 255;
+          } else {
+            d[px] = cArteryActive[0]; d[px+1] = cArteryActive[1]; d[px+2] = cArteryActive[2]; d[px+3] = 255;
+          }
+        }
+        pixelBuffer.updatePixels();
+        p.image(pixelBuffer, 0, 0, p.width, p.height);
+
+        // Vector Render: Food Nodes
+        for (const food of foodSources) {
+          const sx = (food.x / CONFIG.worldDim) * p.width;
+          const sy = (food.y / CONFIG.worldDim) * p.height;
+          const massRatio = Math.max(0.0, food.mass / food.initialMass);
+          
+          // Outer original bounds (dashed)
+          const radMax = (p.width / 800) * 16;
+          p.noFill();
+          p.stroke(255, 200, 50, 60);
+          p.strokeWeight(1);
+          p.drawingContext.setLineDash([4, 4]);
+          p.circle(sx, sy, radMax * 2);
+          p.drawingContext.setLineDash([]);
+
+          // Inner solid shrinking core
+          const radCore = (p.width / 800) * (4 + (massRatio ** 0.65) * 12);
+          p.fill(255, 230, 120);
+          p.noStroke();
+          p.circle(sx, sy, radCore * 2);
+
+          // Resource Readout (% and u)
+          if(CONFIG.showGridOverlay) {
+             const pct = Math.round(massRatio * 100);
+             p.fill(pct < 25 ? '#fb7185' : '#d1d5db'); // Rose-red if depleted
+             p.textAlign(p.CENTER, p.BOTTOM);
+             p.textSize(10);
+             p.text(`${pct}%`, sx, sy - radMax - 6);
+             p.fill(255, 255, 255, 100);
+             p.text(`${Math.round(food.mass)}u`, sx, sy - radMax + 4);
+          }
+        }
+
+        // HUD Overlay
+        if (CONFIG.showGridOverlay) {
+          p.stroke(255, 255, 255, 20);
+          p.strokeWeight(1);
+          const cellPx = p.width / CONFIG.gridDim;
+          for (let i = 1; i < CONFIG.gridDim; i++) {
+            p.line(i * cellPx, 0, i * cellPx, p.height);
+            p.line(0, i * cellPx, p.width, i * cellPx);
+          }
+          p.noStroke();
+          p.textSize(9);
+          p.textAlign(p.CENTER, p.CENTER);
+          for (let r = 0; r < CONFIG.gridDim; r++) {
+            for (let c = 0; c < CONFIG.gridDim; c++) {
+              const hz = Math.round(getCellFrequency(c, r));
+              p.fill(255, 255, 255, 60);
+              p.text(`${hz}Hz`, c * cellPx + cellPx / 2, r * cellPx + cellPx / 2);
+            }
+          }
+        }
+
+        // Top UI Updates
+        if (p.frameCount % 10 === 0) {
+          document.getElementById('fps-display').innerText = `${Math.round(p.frameRate())} FPS`;
+          document.getElementById('agent-display').innerText = `Agents: ${agents.length}`;
+        }
+
+        flushMidiLeds();
+      };
+
+      p.mousePressed = () => {
+        if (p.mouseX >= 0 && p.mouseX < p.width && p.mouseY >= 0 && p.mouseY < p.height) {
+          // Automatically start audio engine on first canvas click
+          if (!isAudioActive) {
+            toggleAudioEngine();
+          }
+          const simX = (p.mouseX / p.width) * CONFIG.worldDim;
+          const simY = (p.mouseY / p.height) * CONFIG.worldDim;
+          foodSources.push(new FoodNodule(simX, simY));
+        }
+      };
+    });
+
+    function spawnNoduleInGrid(col, row) {
+      const cellW = CONFIG.worldDim / CONFIG.gridDim;
+      const jX = (Math.random() * 0.7 + 0.15) * cellW;
+      const jY = (Math.random() * 0.7 + 0.15) * cellW;
+      const x = col * cellW + jX;
+      const y = row * cellW + jY;
+      foodSources.push(new FoodNodule(x, y));
+    }
+
+    // --- STREAMING_CHUNK:Connecting Web MIDI SysEx and bidirectional LED heatmap ---
+    async function initializeWebMidi() {
+      if (!navigator.requestMIDIAccess) {
+        document.getElementById('midi-error-msg').classList.remove('hidden');
+        document.getElementById('chk-midi-active').checked = false;
+        midiEnabled = false;
+        return;
+      }
+      try {
+        midiAccess = await navigator.requestMIDIAccess({ sysex: true });
+        scanMidiPorts();
+        midiAccess.onstatechange = scanMidiPorts;
+      } catch (err) {
+        console.error("MIDI Init Failure:", err);
+      }
+    }
+
+    function scanMidiPorts() {
+      const inSel = document.getElementById('sel-midi-in');
+      const outSel = document.getElementById('sel-midi-out');
+      inSel.innerHTML = '<option value="">(Select Input Device)</option>';
+      outSel.innerHTML = '<option value="">(Select Output Device)</option>';
+
+      let foundLaunchpadIn = false;
+      let foundLaunchpadOut = false;
+
+      for (const input of midiAccess.inputs.values()) {
+        const opt = document.createElement('option');
+        opt.value = input.id;
+        opt.innerText = input.name;
+        if (input.name.toLowerCase().includes('launchpad')) { opt.selected = true; foundLaunchpadIn = true; }
+        inSel.appendChild(opt);
+      }
+      for (const output of midiAccess.outputs.values()) {
+        const opt = document.createElement('option');
+        opt.value = output.id;
+        opt.innerText = output.name;
+        if (output.name.toLowerCase().includes('launchpad')) { opt.selected = true; foundLaunchpadOut = true; }
+        outSel.appendChild(opt);
+      }
+
+      if(foundLaunchpadIn && foundLaunchpadOut) bindMidiEndpoints();
+    }
+
+    function bindMidiEndpoints() {
+      if (!midiAccess) return;
+      const inId = document.getElementById('sel-midi-in').value;
+      const outId = document.getElementById('sel-midi-out').value;
+
+      if (midiIn) midiIn.onmidimessage = null;
+      midiIn = midiAccess.inputs.get(inId);
+      if (midiIn) {
+        midiIn.onmidimessage = onMidiMessageReceived;
+      }
+
+      midiOut = midiAccess.outputs.get(outId);
+      if (midiOut && midiEnabled) {
+        // SysEx: Enter Programmer Mode (Launchpad Mini MK3 ref page 7)
+        try {
+            midiOut.send([0xF0, 0x00, 0x20, 0x29, 0x02, 0x0D, 0x0E, 0x01, 0xF7]);
+            document.getElementById('midi-status').innerText = 'LP MK3 ON';
+            document.getElementById('midi-status').className = 'px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-900/60 text-cyan-300';
+        } catch(e) {}
+      }
+    }
+
+    function onMidiMessageReceived(event) {
+      if (!midiEnabled) return;
+      const [status, data1, data2] = event.data;
+      const isMidimix = (midiIn && midiIn.name && midiIn.name.toLowerCase().includes('midimix'));
+
+      if (isMidimix) {
+        handleMidimix(status, data1, data2);
+      } else {
+        // Launchpad
+        if ((status & 0xF0) === 0x90 && data2 > 0) {
+          const r10 = Math.floor(data1 / 10);
+          const c10 = data1 % 10;
+          if (r10 >= 1 && r10 <= 8 && c10 >= 1 && c10 <= 8) {
+            const row = 8 - r10;
+            const col = c10 - 1;
+            spawnNoduleInGrid(col, row);
+          }
+        }
+      }
+    }
+
+    function setSliderVal(id, minVal, maxVal, normVal, formatCb) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const val = minVal + (maxVal - minVal) * normVal;
+      el.value = val;
+      el.dispatchEvent(new Event('input'));
+    }
+
+    function handleMidimix(status, d1, d2) {
+      const cmd = status & 0xF0;
+      
+      if (cmd === 0x90 && d2 > 0) { // Note On
+        // Actions
+        if (d1 === 3) { document.getElementById('btn-seed-food').click(); }
+        else if (d1 === 6) { document.getElementById('btn-clear-food').click(); }
+        else if (d1 === 9) { document.getElementById('btn-reinoculate').click(); }
+        else if (d1 === 15) { document.getElementById('btn-regen-ir').click(); }
+
+        // Toggles
+        if (d1 === 1) { document.getElementById('btn-engine-toggle').click(); }
+        else if (d1 === 4) { document.getElementById('btn-audio-toggle').click(); }
+        else if (d1 === 7) { document.getElementById('btn-fullscreen').click(); }
+        else if (d1 === 10) { document.getElementById('chk-show-overlay').click(); }
+        else if (d1 === 13) { document.getElementById('chk-reverb-active').click(); }
+        else if (d1 === 16) { document.getElementById('chk-biomod-active').click(); }
+        
+        // Turn on LED
+        if (midiOut) {
+            try { midiOut.send([0x90, d1, 127]); } catch(e){}
+        }
+      } else if (cmd === 0x80 || (cmd === 0x90 && d2 === 0)) { // Note Off
+        // Turn off momentary LEDs
+        if ([3, 6, 9, 12, 15].includes(d1)) {
+          if (midiOut) { try { midiOut.send([0x90, d1, 0]); } catch(e){} }
+        }
+      } else if (cmd === 0xB0) { // CC
+        const val = d2 / 127.0;
+        if (d1 === 19) setSliderVal('slider-lpf-sens', 0.2, 3.0, val);
+        else if (d1 === 23) setSliderVal('slider-lpf-q', 0.5, 18.0, val);
+        else if (d1 === 27) setSliderVal('slider-vca-sens', 0.2, 3.0, val);
+        else if (d1 === 28) setSliderVal('slider-rev-wet', 0.0, 1.0, val);
+        else if (d1 === 29) setSliderVal('slider-rev-dry', 0.0, 1.0, val);
+        else if (d1 === 30) setSliderVal('slider-rev-t60', 0.5, 8.0, val);
+        else if (d1 === 31) setSliderVal('slider-rev-damp', 0.05, 0.95, val);
+        else if (d1 === 33) setSliderVal('slider-rev-pre', 0.005, 0.060, val);
+        
+        else if (d1 === 11) setSliderVal('slider-speed', 0.1, 30.0, val);
+        
+        else if (d1 === 16) setSliderVal('slider-sensor-dist', 6, 160, val);
+        else if (d1 === 20) setSliderVal('slider-bmr', 0.001, 0.050, val);
+        else if (d1 === 24) setSliderVal('slider-loco', 0.002, 0.080, val);
+        
+        else if (d1 === 17) setSliderVal('slider-sharpness', 0.0, 1.0, val);
+        else if (d1 === 21) setSliderVal('slider-agents', 1000, 64000, val);
+      }
+    }
+
+    function flushMidiLeds() {
+      if (!midiEnabled || !midiOut) return;
+      const isMidimix = (midiOut && midiOut.name && midiOut.name.toLowerCase().includes('midimix'));
+      if (isMidimix) return; // handled via note events
+      const now = performance.now();
+      if (now - lastMidiFlushTime < 45) return; // ~22Hz dirty update
+      lastMidiFlushTime = now;
+
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const idx = r * 8 + c;
+          const note = (8 - r) * 10 + (c + 1);
+
+          const matchingFoods = foodSources.filter(f => f.gridCol === c && f.gridRow === r);
+          let targetColor = 0;
+
+          if (matchingFoods.length > 0) {
+            const sumMass = matchingFoods.reduce((acc, f) => acc + f.mass, 0);
+            if (sumMass > 450) targetColor = 13;      // Bright Yellow
+            else if (sumMass > 250) targetColor = 62; // Warm Ochre
+            else if (sumMass > 100) targetColor = 61; // Dim Ochre
+            else targetColor = 84;                      // Faint Amber
+          } else {
+            const mass = cellBiomass[idx];
+            if (mass > 0.08) targetColor = 37;      // Cyan
+            else if (mass > 0.04) targetColor = 22; // Green
+            else if (mass > 0.01) targetColor = 19; // Dim Green
+            else targetColor = 0;                   // Off
+          }
+
+          if (padDirtyBuffer[idx] !== targetColor) {
+            padDirtyBuffer[idx] = targetColor;
+            try { midiOut.send([0x90, note, targetColor]); } catch(e){}
+          }
+        }
+      }
+    }
+
+    // --- STREAMING_CHUNK:Binding UI event listeners to simulation parameters ---
+
+    function updateReverbRouting() {
+      if (!audioCtx) return;
+      reverbDryGain.gain.setTargetAtTime(CONFIG.reverbDry, audioCtx.currentTime, 0.05);
+      reverbWetGain.gain.setTargetAtTime(CONFIG.reverbEnabled ? CONFIG.reverbWet : 0, audioCtx.currentTime, 0.05);
+    }
+
+    function generateReverbIR() {
+      if (!audioCtx || !reverbConvolver) return;
+      const sr = audioCtx.sampleRate;
+      const length = Math.floor(sr * CONFIG.reverbT60);
+      const buffer = audioCtx.createBuffer(2, length, sr);
+      const l = buffer.getChannelData(0);
+      const r = buffer.getChannelData(1);
+      
+      const preDelaySamples = Math.floor(sr * CONFIG.reverbPreDelay);
+      
+      for (let i = preDelaySamples; i < length; i++) {
+        // Simple exponential decay white noise to simulate Velvet Convolver
+        const decay = Math.exp(-6.91 * (i - preDelaySamples) / length); // -60dB decay
+        // Apply high damping (simple 1-pole IIR)
+        // Here we just use a basic noise for mock UI parity
+        if (Math.random() < 0.05) { // sparse noise
+          l[i] = (Math.random() * 2 - 1) * decay;
+        }
+        if (Math.random() < 0.05) {
+          r[i] = (Math.random() * 2 - 1) * decay;
+        }
+      }
+      // Normalize IR energy (L2 norm) to calibrated studio reverberant headroom (-3dBFS ~ 0.7071)
+      let sumSq = 0.0;
+      for (let i = 0; i < length; i++) {
+        sumSq += l[i] * l[i] + r[i] * r[i];
+      }
+      const l2Norm = Math.sqrt(sumSq * 0.5);
+
+      if (l2Norm > 1e-7) {
+        const normScale = 0.70710678 / l2Norm;
+        for (let i = 0; i < length; i++) {
+          l[i] *= normScale;
+          r[i] *= normScale;
+        }
+      }
+      reverbConvolver.buffer = buffer;
+    }
+
+    // Connect voices to reverb split instead of directly to masterGain
+
+    function toggleAudioEngine() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+        
+        // Studio Master Dynamics Limiter (Compressor aligned with Processing updates)
+        const compressor = audioCtx.createDynamicsCompressor();
+        compressor.threshold.setValueAtTime(-3, audioCtx.currentTime);
+        compressor.ratio.setValueAtTime(4, audioCtx.currentTime);
+        compressor.attack.setValueAtTime(0.005, audioCtx.currentTime);
+        compressor.release.setValueAtTime(0.080, audioCtx.currentTime);
+
+        masterGain.connect(compressor);
+        compressor.connect(audioCtx.destination);
+        
+        // Reverb Network
+        reverbConvolver = audioCtx.createConvolver();
+        reverbWetGain = audioCtx.createGain();
+        reverbDryGain = audioCtx.createGain();
+        reverbDryGain.gain.setValueAtTime(CONFIG.reverbDry, audioCtx.currentTime);
+        reverbWetGain.gain.setValueAtTime(CONFIG.reverbEnabled ? CONFIG.reverbWet : 0, audioCtx.currentTime);
+        
+        reverbConvolver.connect(reverbWetGain);
+        reverbWetGain.connect(masterGain);
+        reverbDryGain.connect(masterGain);
+        
+        generateReverbIR();
+
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      isAudioActive = !isAudioActive;
+      const btn = document.getElementById('btn-audio-toggle');
+      
+      if (isAudioActive) {
+        btn.innerText = 'Audio: ON';
+        btn.className = 'py-2 rounded bg-emerald-900/50 hover:bg-emerald-800/70 text-emerald-300 font-semibold border border-emerald-700/60 transition-colors';
+        // Revive voices for existing food
+        foodSources.forEach(f => {
+          if (!f.voice || !f.voice.osc) f.voice = new FoodAudioVoice(f);
+        });
+      } else {
+        btn.innerText = 'Audio: OFF';
+        btn.className = 'py-2 rounded bg-amber-900/40 hover:bg-amber-800/60 text-amber-300 font-semibold border border-amber-700/50 transition-colors';
+        masterGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.05);
+      }
+    }
+
+    document.getElementById('btn-audio-toggle').addEventListener('click', toggleAudioEngine);
+
+    document.getElementById('btn-engine-toggle').addEventListener('click', () => {
+      isRunning = !isRunning;
+      document.getElementById('btn-engine-toggle').innerText = isRunning ? 'Pause' : 'Resume';
+    });
+
+    document.getElementById('btn-clear-food').addEventListener('click', () => {
+      foodSources.forEach(f => f.destroy());
+      foodSources = [];
+    });
+
+    document.getElementById('btn-seed-food').addEventListener('click', () => {
+      for (let i = 0; i < 4; i++) {
+        const c = Math.floor(Math.random() * 8);
+        const r = Math.floor(Math.random() * 8);
+        spawnNoduleInGrid(c, r);
+      }
+    });
+
+
+    document.getElementById('slider-agents').addEventListener('input', (e) => {
+      CONFIG.targetAgentCount = parseInt(e.target.value);
+      document.getElementById('lbl-agents').innerText = CONFIG.targetAgentCount;
+    });
+
+    document.getElementById('btn-reinoculate').addEventListener('click', () => {
+      // Reinoculate colony
+      trailMap.fill(0);
+      cellBiomass.fill(0);
+      agents = [];
+      const cx = CONFIG.worldDim / 2;
+      const cy = CONFIG.worldDim / 2;
+      for (let i = 0; i < CONFIG.targetAgentCount; i++) {
+        const th = Math.random() * Math.PI * 2;
+        const r = Math.random() * 4;
+        agents.push(new Agent(cx + Math.cos(th) * r, cy + Math.sin(th) * r, Math.random() * Math.PI * 2));
+      }
+      foodSources.forEach(f => {
+        f.grazingBuffer = 0;
+        f.isFeeding = false;
+      });
+      generateReverbIR(); // Reset IR just like Processing
+    });
+
+    document.getElementById('btn-fullscreen').addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.log(`Error attempting to enable fullscreen: ${err.message}`);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    document.getElementById('chk-reverb-active').addEventListener('change', (e) => {
+      CONFIG.reverbEnabled = e.target.checked;
+      updateReverbRouting();
+    });
+
+    document.getElementById('chk-biomod-active').addEventListener('change', (e) => {
+      CONFIG.autoModulateReverb = e.target.checked;
+    });
+
+    document.getElementById('slider-rev-wet').addEventListener('input', (e) => {
+      CONFIG.reverbWet = parseFloat(e.target.value);
+      document.getElementById('lbl-rev-wet').innerText = CONFIG.reverbWet.toFixed(2);
+      updateReverbRouting();
+    });
+
+    document.getElementById('slider-rev-dry').addEventListener('input', (e) => {
+      CONFIG.reverbDry = parseFloat(e.target.value);
+      document.getElementById('lbl-rev-dry').innerText = CONFIG.reverbDry.toFixed(2);
+      updateReverbRouting();
+    });
+
+    document.getElementById('slider-rev-t60').addEventListener('input', (e) => {
+      CONFIG.reverbT60 = parseFloat(e.target.value);
+      document.getElementById('lbl-rev-t60').innerText = CONFIG.reverbT60.toFixed(1) + 's';
+      generateReverbIR();
+    });
+
+    document.getElementById('slider-rev-damp').addEventListener('input', (e) => {
+      CONFIG.reverbHighDamping = parseFloat(e.target.value);
+      document.getElementById('lbl-rev-damp').innerText = CONFIG.reverbHighDamping.toFixed(2);
+      generateReverbIR();
+    });
+
+    document.getElementById('slider-rev-pre').addEventListener('input', (e) => {
+      CONFIG.reverbPreDelay = parseFloat(e.target.value);
+      document.getElementById('lbl-rev-pre').innerText = CONFIG.reverbPreDelay.toFixed(3) + 's';
+      generateReverbIR();
+    });
+
+    document.getElementById('btn-regen-ir').addEventListener('click', () => {
+      generateReverbIR();
+    });
+
+    document.getElementById('slider-sharpness').addEventListener('input', (e) => {
+      CONFIG.visualSharpness = parseFloat(e.target.value);
+      document.getElementById('lbl-sharpness').innerText = CONFIG.visualSharpness.toFixed(2);
+    });
+
+    document.getElementById('slider-speed').addEventListener('input', (e) => {
+      CONFIG.simSpeed = parseFloat(e.target.value);
+      document.getElementById('lbl-speed').innerText = `${CONFIG.simSpeed.toFixed(2)}x`;
+    });
+
+    document.getElementById('chk-midi-active').addEventListener('change', (e) => {
+      midiEnabled = e.target.checked;
+      if (midiEnabled) {
+        initializeWebMidi();
+      } else {
+        if (midiOut) {
+          // SysEx: Exit to Live Mode
+          try { midiOut.send([0xF0, 0x00, 0x20, 0x29, 0x02, 0x0D, 0x0E, 0x00, 0xF7]); } catch(e){}
+        }
+        document.getElementById('midi-status').innerText = 'MIDI OFF';
+        document.getElementById('midi-status').className = 'px-2 py-0.5 rounded text-[10px] font-mono bg-neutral-800 text-neutral-500 transition-colors';
+      }
+    });
+
+    document.getElementById('sel-midi-in').addEventListener('change', bindMidiEndpoints);
+    document.getElementById('sel-midi-out').addEventListener('change', bindMidiEndpoints);
+
+
+    document.getElementById('sel-octave-shift').addEventListener('change', e => {
+      CONFIG.octaveShift = parseInt(e.target.value, 10);
+      foodSources.forEach(f => {
+          if (f.voice && f.voice.osc) {
+              try {
+                  f.voice.osc.frequency.setTargetAtTime(getCellFrequency(f.gridCol, f.gridRow), audioCtx.currentTime, 0.1);
+              } catch(err) {}
+          }
+      });
+    });
+
+    document.getElementById('slider-visual-blur').addEventListener('input', e => {
+      CONFIG.visualBlur = parseFloat(e.target.value);
+      document.getElementById('lbl-visual-blur').textContent = parseFloat(e.target.value).toFixed(1) + ' px';
+    });
+
+    document.getElementById('sel-root-note').addEventListener('change', (e) => {
+      CONFIG.rootNote = parseInt(e.target.value);
+      foodSources.forEach(f => {
+        if (f.voice.osc) f.voice.osc.frequency.setTargetAtTime(getCellFrequency(f.gridCol, f.gridRow), audioCtx.currentTime, 0.05);
+      });
+    });
+
+    document.getElementById('sel-scale-type').addEventListener('change', (e) => {
+      CONFIG.scaleType = e.target.value;
+      foodSources.forEach(f => {
+        if (f.voice.osc) f.voice.osc.frequency.setTargetAtTime(getCellFrequency(f.gridCol, f.gridRow), audioCtx.currentTime, 0.05);
+      });
+    });
+
+    document.querySelectorAll('.btn-wave-sel').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.btn-wave-sel').forEach(b => {
+          b.className = 'btn-wave-sel py-1 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 font-mono transition-colors';
+        });
+        e.target.className = 'btn-wave-sel py-1 rounded bg-cyan-950 text-cyan-300 border border-cyan-700 font-mono transition-colors';
+        CONFIG.waveform = e.target.dataset.wave;
+        foodSources.forEach(f => {
+          if (f.voice.osc) f.voice.osc.type = CONFIG.waveform;
+        });
+      });
+    });
+
+    document.getElementById('chk-show-overlay').addEventListener('change', (e) => {
+      CONFIG.showGridOverlay = e.target.checked;
+    });
+
+    document.getElementById('slider-lpf-sens').addEventListener('input', (e) => {
+      CONFIG.lpfSens = parseFloat(e.target.value);
+      document.getElementById('lbl-lpf-sens').innerText = `${CONFIG.lpfSens.toFixed(1)}x`;
+    });
+
+    document.getElementById('slider-lpf-q').addEventListener('input', (e) => {
+      CONFIG.lpfQ = parseFloat(e.target.value);
+      document.getElementById('lbl-lpf-q').innerText = CONFIG.lpfQ.toFixed(1);
+    });
+
+    document.getElementById('slider-vca-sens').addEventListener('input', (e) => {
+      CONFIG.vcaSens = parseFloat(e.target.value);
+      document.getElementById('lbl-vca-sens').innerText = `${CONFIG.vcaSens.toFixed(1)}x`;
+    });
+
+    document.getElementById('slider-sensor-dist').addEventListener('input', (e) => {
+      CONFIG.sensorDist = parseFloat(e.target.value);
+      document.getElementById('lbl-sensor-dist').innerText = `${Math.round(CONFIG.sensorDist)} px`;
+    });
+
+    document.getElementById('slider-bmr').addEventListener('input', (e) => {
+      CONFIG.bmr = parseFloat(e.target.value);
+      document.getElementById('lbl-bmr').innerText = CONFIG.bmr.toFixed(4);
+    });
+
+    document.getElementById('slider-loco').addEventListener('input', (e) => {
+      CONFIG.locomotionCost = parseFloat(e.target.value);
+      document.getElementById('lbl-loco').innerText = CONFIG.locomotionCost.toFixed(4);
+    });
+
+    document.querySelectorAll('.btn-palette-sel').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.btn-palette-sel').forEach(b => {
+          b.className = 'btn-palette-sel py-1.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 transition-colors';
+        });
+        e.target.className = 'btn-palette-sel py-1.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-700/60 font-semibold transition-colors';
+        CONFIG.palette = e.target.dataset.pal;
+      });
+    });
+  </script>
+</body>
+</html>

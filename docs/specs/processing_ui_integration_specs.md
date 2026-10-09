@@ -48,8 +48,8 @@ Controls the audio synthesis parameters driven by the slime mold's biological st
 
 | Control Label | UI Type | Variable Type | Default | Action / Functional Mapping |
 | :--- | :--- | :--- | :--- | :--- |
-| **Filter Cutoff Sensitivity** | Slider | `float` | `1.2f` | **Range:** `0.2f` to `3.0f`. **Step:** `0.1f`. Multiplies the depth of the low-pass filter sweep. Formula: `TargetHz = BaseHz + (MassRatio * MaxHz * Sensitivity)`. |
-| **Filter Resonance (Q)** | Slider | `float` | `4.5f` | **Range:** `0.5f` to `18.0f`. **Step:** `0.5f`. Sets the resonance peak parameter of the Biquad filter algorithm. |
+| **Filter Cutoff Sensitivity** | Slider | `float` | `3.0f` | **Range:** `0.2f` to `3.0f`. **Step:** `0.1f`. Multiplies the depth of the low-pass filter sweep. Formula: `TargetHz = BaseHz + (MassRatio * MaxHz * Sensitivity)`. Defaulted to maximum on startup. |
+| **Filter Resonance (Q)** | Slider | `float` | `18.0f` | **Range:** `0.5f` to `18.0f`. **Step:** `0.5f`. Sets the resonance peak parameter of the Biquad filter algorithm. Defaulted to maximum on startup. |
 | **Adjacent Mass VCA Gain** | Slider | `float` | `1.0f` | **Range:** `0.2f` to `3.0f`. **Step:** `0.1f`. Sensitivity multiplier for the Moore neighborhood. Formula: `VCALevel = min(1.0, AdjacentBiomassSum * VCASensitivity)`. |
 
 ---

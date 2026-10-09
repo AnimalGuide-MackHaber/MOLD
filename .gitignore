@@ -2,3 +2,5 @@
 tests/build/
 application.*/
 .DS_Store
+reflex_memory.db
+macos-x86_64/

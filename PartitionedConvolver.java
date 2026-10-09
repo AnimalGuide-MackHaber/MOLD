@@ -16,8 +16,9 @@ public class PartitionedConvolver {
     private float[][] irPartitionsRealL, irPartitionsImagL;
     private float[][] irPartitionsRealR, irPartitionsImagR;
 
-    // Delay line of input frequency domain blocks: [numPartitions][fftSize]
-    private float[][] inputHistoryReal, inputHistoryImag;
+    // Delay lines of input frequency domain blocks for Left and Right channels: [numPartitions][fftSize]
+    private float[][] inputHistoryRealL, inputHistoryImagL;
+    private float[][] inputHistoryRealR, inputHistoryImagR;
     private int historyIndex = 0;
 
     // Output overlap-add tail buffers
@@ -54,14 +55,17 @@ public class PartitionedConvolver {
         int irLen = Math.max(irL.length, irR.length);
         int P = (irLen + blockSize - 1) / blockSize;
         if (P < 1) P = 1;
+        if (P > 128) P = 128; // Cap partition count to 128 (~1.5s IR) for real-time safety
 
         float[][] newIrRealL = new float[P][fftSize];
         float[][] newIrImagL = new float[P][fftSize];
         float[][] newIrRealR = new float[P][fftSize];
         float[][] newIrImagR = new float[P][fftSize];
 
-        float[][] newInputReal = new float[P][fftSize];
-        float[][] newInputImag = new float[P][fftSize];
+        float[][] newInputRealL = new float[P][fftSize];
+        float[][] newInputImagL = new float[P][fftSize];
+        float[][] newInputRealR = new float[P][fftSize];
+        float[][] newInputImagR = new float[P][fftSize];
 
         for (int p = 0; p < P; p++) {
             for (int i = 0; i < blockSize; i++) {
@@ -87,8 +91,10 @@ public class PartitionedConvolver {
             this.irPartitionsImagL = newIrImagL;
             this.irPartitionsRealR = newIrRealR;
             this.irPartitionsImagR = newIrImagR;
-            this.inputHistoryReal = newInputReal;
-            this.inputHistoryImag = newInputImag;
+            this.inputHistoryRealL = newInputRealL;
+            this.inputHistoryImagL = newInputImagL;
+            this.inputHistoryRealR = newInputRealR;
+            this.inputHistoryImagR = newInputImagR;
             this.overlapL = newOverlapL;
             this.overlapR = newOverlapR;
             this.accRealL = newAccRealL;
@@ -124,23 +130,37 @@ public class PartitionedConvolver {
                 return;
             }
 
-            float[] curInReal = inputHistoryReal[historyIndex];
-            float[] curInImag = inputHistoryImag[historyIndex];
+            float[] curInRealL = inputHistoryRealL[historyIndex];
+            float[] curInImagL = inputHistoryImagL[historyIndex];
+            float[] curInRealR = inputHistoryRealR[historyIndex];
+            float[] curInImagR = inputHistoryImagR[historyIndex];
 
-            // 1. Copy inL/inR to FFT buffers with zero padding
+            // 1. Copy inL/inR to FFT buffers with zero padding, dynamic input headroom protection,
+            // and natural acoustic room cross-bleed (85% direct channel, 15% cross-room bleed)
             for (int i = 0; i < blockSize; i++) {
-                curInReal[i] = 0.5f * (inL[i] + inR[i]);
-                curInImag[i] = 0.0f;
+                float xL = inL[i];
+                float xR = inR[i];
+                float sendL = 0.85f * xL + 0.15f * xR;
+                float sendR = 0.15f * xL + 0.85f * xR;
+
+                // Soft saturation protects the reverb tank from resonant voice spikes
+                curInRealL[i] = (sendL > 1.2f || sendL < -1.2f) ? (float) Math.tanh(sendL * 0.75f) * 1.333f : sendL;
+                curInImagL[i] = 0.0f;
+                curInRealR[i] = (sendR > 1.2f || sendR < -1.2f) ? (float) Math.tanh(sendR * 0.75f) * 1.333f : sendR;
+                curInImagR[i] = 0.0f;
             }
             for (int i = blockSize; i < fftSize; i++) {
-                curInReal[i] = 0.0f;
-                curInImag[i] = 0.0f;
+                curInRealL[i] = 0.0f;
+                curInImagL[i] = 0.0f;
+                curInRealR[i] = 0.0f;
+                curInImagR[i] = 0.0f;
             }
 
-            // 2. Compute Forward FFT -> stored in inputHistory at historyIndex
-            FastFFT.fft(curInReal, curInImag);
+            // 2. Compute Forward FFTs for both channels
+            FastFFT.fft(curInRealL, curInImagL);
+            FastFFT.fft(curInRealR, curInImagR);
 
-            // 3. Spectral accumulation: sum_p (X_{k-p} * H_p)
+            // 3. Spectral accumulation: sum_p (X_{k-p} * H_p) for Left and Right channels
             Arrays.fill(accRealL, 0.0f);
             Arrays.fill(accImagL, 0.0f);
             Arrays.fill(accRealR, 0.0f);
@@ -149,8 +169,10 @@ public class PartitionedConvolver {
             final int P = numPartitions;
             for (int p = 0; p < P; p++) {
                 int hIdx = (historyIndex - p + P) % P;
-                float[] xR = inputHistoryReal[hIdx];
-                float[] xI = inputHistoryImag[hIdx];
+                float[] xRL = inputHistoryRealL[hIdx];
+                float[] xIL = inputHistoryImagL[hIdx];
+                float[] xRR = inputHistoryRealR[hIdx];
+                float[] xIR = inputHistoryImagR[hIdx];
 
                 float[] hRL = irPartitionsRealL[p];
                 float[] hIL = irPartitionsImagL[p];
@@ -158,16 +180,17 @@ public class PartitionedConvolver {
                 float[] hIR = irPartitionsImagR[p];
 
                 for (int k = 0; k < fftSize; k++) {
-                    float xr = xR[k];
-                    float xi = xI[k];
+                    float xrL = xRL[k];
+                    float xiL = xIL[k];
+                    // Left channel complex multiply: (xrL + j*xiL) * (hrl + j*hil)
+                    accRealL[k] += xrL * hRL[k] - xiL * hIL[k];
+                    accImagL[k] += xrL * hIL[k] + xiL * hRL[k];
 
-                    // Left channel complex multiply: (xr + j*xi) * (hrl + j*hil)
-                    accRealL[k] += xr * hRL[k] - xi * hIL[k];
-                    accImagL[k] += xr * hIL[k] + xi * hRL[k];
-
-                    // Right channel complex multiply: (xr + j*xi) * (hrr + j*hir)
-                    accRealR[k] += xr * hRR[k] - xi * hIR[k];
-                    accImagR[k] += xr * hIR[k] + xi * hRR[k];
+                    float xrR = xRR[k];
+                    float xiR = xIR[k];
+                    // Right channel complex multiply: (xrR + j*xiR) * (hrr + j*hir)
+                    accRealR[k] += xrR * hRR[k] - xiR * hIR[k];
+                    accImagR[k] += xrR * hIR[k] + xiR * hRR[k];
                 }
             }
 
@@ -175,12 +198,17 @@ public class PartitionedConvolver {
             FastFFT.ifft(accRealL, accImagL);
             FastFFT.ifft(accRealR, accImagR);
 
-            // 5 & 6. Overlap-add with previous tails and blend dry/wet
+            // 5 & 6. Overlap-add with previous tails and blend dry/wet with acoustic headroom scaling
+            float mixSum = dryMix + wetMix;
+            float mixNorm = (mixSum > 1.0f) ? (1.0f / (float) Math.sqrt(dryMix * dryMix + wetMix * wetMix)) : 1.0f;
+            float effDry = dryMix * mixNorm;
+            float effWet = wetMix * mixNorm;
+
             for (int i = 0; i < blockSize; i++) {
-                outL[i] = inL[i] * dryMix + (accRealL[i] + overlapL[i]) * wetMix;
+                outL[i] = inL[i] * effDry + (accRealL[i] + overlapL[i]) * effWet;
                 overlapL[i] = accRealL[blockSize + i];
 
-                outR[i] = inR[i] * dryMix + (accRealR[i] + overlapR[i]) * wetMix;
+                outR[i] = inR[i] * effDry + (accRealR[i] + overlapR[i]) * effWet;
                 overlapR[i] = accRealR[blockSize + i];
             }
 

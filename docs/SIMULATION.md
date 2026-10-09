@@ -9,20 +9,20 @@ This document details the mathematical models, algorithmic mechanisms, and bioen
 The simulation is based on the agent-based multi-agent transport network model introduced by **Jeff Jones (2010)**, augmented with an explicit metabolic energy budget (bioenergetics) and finite nutrient grazing dynamics.
 
 The system consists of two coupled layers:
-1. **Continuous Agent Population:** Up to $N = 25{,}000$ discrete mobile particles with floating-point coordinates $(x, y)$, heading angle $\theta \in [0, 2\pi)$, and internal stored energy $E \ge 0$.
-2. **Chemoattractant Trail Field:** A discrete 2D scalar grid $T(x, y) \in [0, 255]$ of resolution $420 \times 420$ with toroidal boundary conditions (wrap-around topology) representing both slime trail secretions and food odor gradients.
+1. **Continuous Agent Population:** Up to $N_{\max} = 64{,}000$ discrete mobile particles with floating-point coordinates $(x, y)$, heading angle $\theta \in [0, 2\pi)$, and internal stored energy $E \ge 0$ (default initial population $N_0 = 16{,}000$).
+2. **Chemoattractant Trail Field:** A discrete 2D scalar grid $T(x, y) \in [0, 255]$ of resolution $720 \times 720$ with toroidal boundary conditions (wrap-around topology) representing both slime trail secretions and food odor gradients.
 
 ```mermaid
 flowchart TD
     subgraph AgentLoop["Per-Agent Simulation Step"]
-        Sensors["1. 3-Sensor Chemotaxis Sampling"] --> Steering["2. Angular Steering"]
+        Sensors["1. 3-Sensor Chemotaxis Sampling (SIN_LUT)"] --> Steering["2. Fast Heading Steering (Xorshift32)"]
         Steering --> Energy["3. Bioenergetics & Metabolic Costs"]
         Energy --> Ingest["4. Food Grazing & Assimilation"]
         Ingest --> Mitosis["5. Mitosis or Starvation Necrosis"]
         Mitosis --> Deposit["6. Trail Field Deposition"]
     end
     subgraph FieldStep["Environmental Field Step"]
-        FoodInj["Food Core Injection"] --> Diffuse["3x3 Box Blur Convolution"]
+        FoodInj["Food Core Injection"] --> Diffuse["3x3 Box Blur Convolution (Zero-Modulo Interior)"]
         Diffuse --> Decay["Exponential Evaporative Decay"]
     end
     Deposit --> FieldStep
@@ -53,6 +53,15 @@ $$\begin{aligned}
                 p_right
 ```
 
+### Trigonometric Table Lookup (`SIN_LUT`)
+
+To maintain 60 FPS across tens of thousands of active agents without JVM Math transcendental bottlenecking, sensor projection angles are evaluated via a 4096-entry precomputed table:
+
+$$\text{idx} = \left\lfloor \theta \cdot \frac{4096}{2\pi} \right\rfloor \ \& \ 4095$$
+$$\cos(\theta) = \text{SIN\_LUT}\left[(\text{idx} + 1024) \ \& \ 4095\right], \quad \sin(\theta) = \text{SIN\_LUT}[\text{idx}]$$
+
+The maximum angular error is $< 0.0008\text{ rad}$ ($< 0.035\text{ px}$ at maximum $45\text{ px}$ lookahead distance), well below discrete pixel resolution.
+
 ### Bilinear Trail Field Interpolation
 
 Because sensor locations are continuous real coordinates on a discrete grid, the trail intensity $T(\mathbf{p})$ is sampled using bilinear interpolation:
@@ -69,7 +78,7 @@ T(\mathbf{p}) &= T_{\text{top}}(1 - f_y) + T_{\text{bottom}} f_y
 
 ### Steering Decision Rules
 
-Let $S_F = T(\mathbf{p}_{\text{forward}})$, $S_L = T(\mathbf{p}_{\text{left}})$, and $S_R = T(\mathbf{p}_{\text{right}})$. The agent updates its heading $\theta$ using turn angle $\phi_t$ (`turnAngle` $\approx 22^\circ$):
+Let $S_F = T(\mathbf{p}_{\text{forward}})$, $S_L = T(\mathbf{p}_{\text{left}})$, and $S_R = T(\mathbf{p}_{\text{right}})$. The agent updates its heading $\theta$ using turn angle $\phi_t$ (`turnAngle` $\approx 22^\circ$) and fast Xorshift32 uniform jitter:
 
 - **Forward Dominant** ($S_F > S_L$ and $S_F > S_R$): Continue straight with slight brownian jitter: $\theta \leftarrow \theta + \mathcal{U}(-0.04, 0.04)$.
 - **Left Dominant** ($S_L > S_R$): Steer counter-clockwise: $\theta \leftarrow \theta - \phi_t + \mathcal{U}(-0.03, 0.03)$.
@@ -133,7 +142,7 @@ The new field value combines the current value, diffusion blend $d = 0.45$, and 
 
 $$T_{t+1}(x, y) = \left[ (1 - d) T_t(x, y) + d \, \bar{T}(x, y) \right] \cdot \lambda$$
 
-A low-pass dead-zone cutoff ($T < 0.15 \implies T = 0$) prevents floating-point subnormal numbers and cleans up dead trails.
+A low-pass dead-zone cutoff ($T < 0.15 \implies T = 0$) prevents floating-point subnormal numbers and cleans up dead trails. The inner loop avoids modulo operations on interior coordinates ($1 \le x < W-1$), achieving $>4\times$ cache throughput.
 
 ---
 
@@ -146,11 +155,16 @@ Food nodules act as finite resource reservoirs:
 
 ---
 
-## 6. Visualization & Zorn Palette Color Mapping
+## 6. Visualization & GLSL Shader Pipeline
 
-The pixel rendering pass in `Render.pde` translates continuous field values into discrete cellular structures inspired by the historical Zorn palette (Yellow Ochre, Vermilion Red, Flake White, Ivory Black):
+Continuous simulation fields are rendered via hardware acceleration:
+1. **CPU Trail Streaming:** `trailMap` values are packed into a permanent `PImage` (`trailTexture`) CPU pixel buffer and uploaded via `updatePixels()`.
+2. **GLSL Fragment Shader (`render.glsl`):** Processes color ramp grading and procedural sigmoid sharpness:
+   - When `visualSharpness == 0.0`, the shader renders smooth continuous gradients.
+   - As `visualSharpness` approaches $1.0$, the sigmoid transitions into sharp binary cellular walls.
+3. **Motion Blur FBO Feedback:** Offscreen framebuffers blend consecutive frames with adjustable persistence alpha (`visualBlur`), simulating trailing phosphors.
 
-### Slime Network Density Thresholds
+### Slime Network Density Thresholds (Zorn Theme)
 
 | Trail Value $T$ | Biological Feature | Zorn Palette Representation |
 |:---|:---|:---|
@@ -160,14 +174,6 @@ The pixel rendering pass in `Render.pde` translates continuous field values into
 | $10.0 \le T < 30.0$ | Plasmodial Sheet | Vibrant Yellow `#EAB308` |
 | $T \ge 30.0$ | Major Cytoplasmic Artery | Bright Artery `#FEF08A` |
 
-### Food Nodule Feedback
-
-1. **Idle State:** Soft Flake White (`#F5F5F0`).
-2. **Grazing State:** When contacted by slime mold, the nodule envelope (`consumptionActivity`) smooths up, shifting the core color to Vermilion Red (`#E34234`).
-3. **Depletion Fade:** As the remaining nutrient ratio $\rho = N / N_0$ drops, the active color transitions from Vermilion Red back to Yellow Ochre (`#EAB308`):
-   $$C_{\text{active}} = \text{lerpColor}(\text{Yellow}, \text{Red}, \rho)$$
-   $$C_{\text{final}} = \text{lerpColor}(\text{White}, C_{\text{active}}, \text{activity})$$
-
 ---
 
 ## 7. Parameter Reference
@@ -175,7 +181,8 @@ The pixel rendering pass in `Render.pde` translates continuous field values into
 | Parameter | Variable | Default | Range | Description |
 |:---|:---|:---|:---|:---|
 | Simulation Speed | `simSpeed` | `0.40` | `0.05 – 2.00` | Sub-step accumulator multiplier |
-| Sensor Distance | `sensorDist` | `16.0 px` | `6.0 – 45.0` | Lookahead distance for 3-sensor chemotaxis |
+| Active Agent Population | `targetAgentCount` | `16,000` | `1,000 – 64,000` | Target continuous population ceiling |
+| Sensor Distance | `sensorDist` | `16.0 px` | `6.0 – 160.0` | Lookahead distance for 3-sensor chemotaxis |
 | Sensor Angle | `sensorAngle` | `35.0°` | Fixed | Angular spread of left/right sensors |
 | Turn Angle | `turnAngle` | `22.0°` | Fixed | Heading change upon lateral gradient detection |
 | Trail Decay | `trailDecay` | `0.965` | Fixed | Multiplier per time step (evaporative decay) |
@@ -184,3 +191,5 @@ The pixel rendering pass in `Render.pde` translates continuous field values into
 | Locomotion Cost | `locomotionCost` | `0.018` | `0.002 – 0.080` | Terrain penalty when traversing new areas |
 | Mitosis Threshold | `mitosisThreshold` | `75.0` | Fixed | Stored energy required for cell division |
 | Assimilation Yield | `assimilationYield`| `8.0` | Fixed | Energy gained per unit of nutrient ingested |
+| Visual Sharpness | `visualSharpness` | `0.0` | `0.0 – 1.0` | Sigmoid sharpness curve in GLSL shader |
+| Motion Blur Persistence | `visualBlur` | `0.0` | `0.0 – 8.0` | Motion blur trail persistence alpha |

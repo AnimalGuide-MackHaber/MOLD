@@ -10,8 +10,9 @@ class HarmonicData {
 
 HarmonicData getCellHarmonics(int col, int row) {
   int invertedRow = (GRID_DIM - 1) - row;
-  int octaveShift = invertedRow / 2;
-  int oct = baseOctave + octaveShift;
+  int gridOctaveShift = invertedRow / 2;
+  int userOctaveShift = (octaveShiftIdx - 1);
+  int oct = baseOctave + gridOctaveShift + userOctaveShift;
   float subOffset = (invertedRow % 2 == 1) ? 1.5f : 1.0f;
 
   float freq = 110.0f;

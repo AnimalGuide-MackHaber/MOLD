@@ -98,13 +98,49 @@ $$G_{t} = G_{t-1} + (\text{targetGain} - G_{t-1}) \cdot 0.15$$
 
 ---
 
-## 4. Multi-Voice Headroom & Equal-Power Panning
+## 4. Multi-Voice Headroom & 3D Binaural Spatial Soundscape
 
-### Equal-Power Stereo Panning
+### Listener-Centered 3D Spatial Geometry
 
-Voices are panned across the stereo field according to horizontal canvas coordinate $x \in [0, W]$:
-$$\theta_{\text{pan}} = \text{constrain}\left(\frac{x}{W}, \; 0.05, \; 0.95\right) \cdot \frac{\pi}{2}$$
-$$g_L = \cos(\theta_{\text{pan}}), \quad g_R = \sin(\theta_{\text{pan}})$$
+The virtual listener is seated at the center of the $8 \times 8$ simulation grid at $(x_0, y_0) = (W / 2, H / 2) = (360, 360)$. Food nodules are projected into a 3D binaural coordinate space $(\Delta x, \Delta y, z)$:
+
+1. **Normalized Cartesian Coordinates:**
+   $$\Delta x = \text{constrain}\left(\frac{x - x_0}{x_0}, \; -1.0, \; 1.0\right) \quad (\text{Left } [-1] \to \text{Right } [+1])$$
+   $$\Delta y = \text{constrain}\left(\frac{y_0 - y}{y_0}, \; -1.0, \; 1.0\right) \quad (\text{Rear } [-1] \to \text{Front } [+1])$$
+
+2. **Frequency & Front/Back Harmonic Layout:**
+   - **Front ($\Delta y > 0$, Rows 0–3):** Higher harmonic registers ($2\times$ to $4\times$ fundamental pitch) are located in front of the listener.
+   - **Rear ($\Delta y < 0$, Rows 4–7):** Deeper harmonic registers and sub-bass frequencies are located behind the listener.
+
+3. **Front vs. Back Pinna Spectral Modeling:**
+   Human ears differentiate forward from backward sound sources using outer ear pinna concha acoustic reflections.
+   Each voice incorporates a dedicated `frontBackFilter` (Biquad high-shelf at $4.0\text{ kHz}$):
+   - **Front Sources ($\Delta y > 0$):** Direct presence boost $G_{\text{front}} = +1.5\text{ dB} \cdot \Delta y$ preserving high-frequency clarity.
+   - **Rear Sources ($\Delta y < 0$):** Rear-head acoustic shadow attenuates high frequencies $G_{\text{rear}} = -4.5\text{ dB} \cdot |\Delta y|$.
+
+4. **Slime Mold Mass $\to$ 3D Elevation (Z-Axis Height):**
+   When the slime mold colony swarms onto a food nodule, the local biomass density elevates the perceived sound vertically in 3D headphone space:
+   - Elevation parameter: $E = \text{constrain}(\text{adjacentMass} / 800.0, \; 0.0, \; 1.0)$.
+   - Modeled via an HRTF vertical pinna notch filter (`pinnaElevationFilter`) whose notch frequency sweeps from $6.2\text{ kHz}$ (ear level / horizon) up to $9.2\text{ kHz}$ (overhead zenith) with deepening notch attenuation ($-4\text{ dB} \to -8\text{ dB}$).
+
+5. **Lateral Azimuth Panning & Constant-Power Law:**
+   Lateral pan passes through an expansive $1.35\times$ power curve:
+   $$b_{\text{shaped}} = \text{sgn}(\Delta x) \cdot |\Delta x|^{1.35}$$
+   $$\text{panNorm} = \text{constrain}(0.5 + 0.5 \cdot b_{\text{shaped}}, \; 0.0, \; 1.0)$$
+   $$\theta_{\text{pan}} = \text{panNorm} \cdot \frac{\pi}{2}, \quad g_L = \cos(\theta_{\text{pan}}), \quad g_R = \sin(\theta_{\text{pan}})$$
+
+6. **Binaural Interaural Time Difference (ITD / Haas Micro-Delay):**
+   The ear opposite the source receives a micro-delay of up to $18\text{ samples}$ ($\approx 0.4\text{ ms}$):
+   $$\tau_{\text{delay}} = \lfloor |b_{\text{shaped}}| \cdot 18.0 \rfloor$$
+   If $b_{\text{shaped}} < 0$, right ear is delayed; if $b_{\text{shaped}} > 0$, left ear is delayed.
+
+7. **Acoustic Head-Shadow Filter Tilt (ILD):**
+   Ear facing the source receives direct high-frequency transmission, opposite ear receives lateral shadow attenuation:
+   $$f_{c, L} = f_c \cdot (1 - 0.18 \cdot \Delta x), \quad f_{c, R} = f_c \cdot (1 + 0.18 \cdot \Delta x)$$
+
+8. **Distance Attenuation:**
+   Sound level subtly attenuates with Euclidean distance from listener center:
+   $$d = \sqrt{\Delta x^2 + \Delta y^2}, \quad G_{\text{dist}} = \frac{1.0}{1.0 + 0.25 \cdot d}$$
 
 ### Acoustic Summer Headroom Scaling
 
@@ -113,7 +149,7 @@ $$S_{\text{voice}} = \frac{0.24}{\sqrt{\max(1.0, \; 0.75 \cdot V_{\text{active}}
 
 ---
 
-## 5. Velvet Noise Algorithmic Convolver (UP-OLA)
+## 5. Velvet Noise Algorithmic Convolver (True Stereo UP-OLA)
 
 Reverberation is implemented via real-time partitioned convolution with a parametrically synthesized stereo velvet-noise impulse response.
 
@@ -129,16 +165,26 @@ Velvet noise synthesizes sparse, pseudo-random sequences of unit impulses ($+1$ 
    $$y[n] = (1 - \alpha) x[n] + \alpha y[n-1]$$
 5. **Stereo Decorrelation:** Left and right impulse trains use independent pseudorandom seeds, achieving normalized cross-correlation $\rho_{LR} < 0.01$.
 
+### True Stereo Convolution Architecture
+
+To prevent reverberant tails from collapsing the stereo image into mono, the convolver features dual-channel input history ring buffers and natural $85/15$ acoustic room cross-bleed:
+$$\text{send}_L = 0.85 \cdot x_L + 0.15 \cdot x_R, \quad \text{send}_R = 0.15 \cdot x_L + 0.85 \cdot x_R$$
+
 ```mermaid
 flowchart LR
-    In["Mono/Stereo Input (Block B=512)"] --> Pad["Zero-Pad to 2B=1024"]
-    Pad --> FFT["FastFFT.fft()"]
-    FFT --> History["Input History Ring Buffer [P][1024]"]
-    History --> FD_Mpy["Frequency-Domain Multiplications: sum_p(X_{k-p} * H_p)"]
-    IR_Parts["IR Partitions [P][1024]"] --> FD_Mpy
-    FD_Mpy --> IFFT["FastFFT.ifft()"]
-    IFFT --> OLA["Overlap-Add Buffer + Dry/Wet Blend"]
-    OLA --> Out["Stereo Reverb Output (512)"]
+    InL["Input Left (B=512)"] --> Cross["85/15 Acoustic Cross-Bleed"]
+    InR["Input Right (B=512)"] --> Cross
+    Cross --> FFT_L["FastFFT(send_L)"]
+    Cross --> FFT_R["FastFFT(send_R)"]
+    FFT_L --> HistL["History Ring Buffer L [P][1024]"]
+    FFT_R --> HistR["History Ring Buffer R [P][1024]"]
+    HistL --> AccL["Spectral Acc: sum_p(X_L * H_L)"]
+    HistR --> AccR["Spectral Acc: sum_p(X_R * H_R)"]
+    AccL --> IFFT_L["FastFFT.ifft(L)"]
+    AccR --> IFFT_R["FastFFT.ifft(R)"]
+    IFFT_L --> OLA["Overlap-Add & Headroom Mix"]
+    IFFT_R --> OLA
+    OLA --> Out["Wide Stereo Output"]
 ```
 
 ### Uniform Partitioned Overlap-Add (UP-OLA)
@@ -154,14 +200,16 @@ flowchart LR
 
 ## 6. Bio-Sonification Telemetry Routing
 
-The slime mold's macroscopic colony states dynamically modulate the acoustic reverberator:
+The slime mold's macroscopic colony states dynamically modulate the acoustic reverberator, scaled by the **Mold Bio-Mod Depth** (`reverbBioModDepth`, default `2.0x`):
 
-| Biological Macro-Metric | Reverb Parameter | Transfer Function | Musical Character |
+| Biological Macro-Metric | Reverb Parameter | Transfer Function / Mapping | Musical Character |
 |:---|:---|:---|:---|
-| **Colony Biomass** ($\sum E_{\text{cell}}$) | **Wet / Dry Mix** | $\text{Wet} = 0.8 \cdot \tanh\left(\frac{\text{Biomass}}{10000}\right)$<br>$\text{Dry} = 1.0 - 0.4 \cdot \text{Wet}$ | Small colony is dry and intimate; massive colony immerses the space in lush ambient reverb. |
-| **Locomotion Cost** | **High Damping** ($\alpha_{\text{damp}}$) | $\alpha = \text{constrain}\left(0.2 + 0.6 \cdot \frac{\text{Cost}}{0.1}, 0.05, 0.95\right)$ | Rapid exploration darkens the acoustic reflections. |
-| **Tendril Reach** ($d_s$) | **Pre-Delay** ($t_{\text{pre}}$) | $t_{\text{pre}} = 5\text{ms} + \left(\frac{d_s}{45\text{px}}\right) \cdot 40\text{ms}$ | Extended arterial reach delays first reflections, expanding perceived room size. |
-| **Colony Mass Doubling** | **Impulse Reseed** | Triggers asynchronous background IR rebuild | Mitosis bursts inject distinct spatial reflections without halting audio playback. |
+| **Colony Biomass & Feeding** ($\sum E_{\text{cell}}$, $A_{\text{feed}}$) | **Wet / Dry Mix** | $\Delta \text{Wet} = \Delta \text{Mass} \cdot 0.20 + (d_{\text{spread}} - 0.4) \cdot 0.15 + A_{\text{feed}} \cdot 0.15$<br>$\text{Wet} = \text{baseWet} + \Delta \text{Wet} \cdot D_{\text{mod}}$ | Small colony is dry and intimate; sprawling, gorging colony immerses the space in lush ambient reverb. |
+| **Feeding vs Exploration** ($A_{\text{feed}}$, $C_{\text{loco}}$) | **High Damping** ($\alpha_{\text{damp}}$) | $\alpha = \text{baseDamp} + (A_{\text{feed}} \cdot 0.16 + \Delta \text{spread} \cdot 0.12 - \Delta C_{\text{loco}} \cdot 0.10) \cdot D_{\text{mod}}$ | Active roaming brightens acoustic reflections; resting/grazing clusters damp high frequencies. |
+| **Tendril Reach & Spatial Spread** ($d_s$, $d_{\text{spread}}$) | **Pre-Delay** ($t_{\text{pre}}$) | $t_{\text{pre}} = \text{basePre} + ((d_{\text{spread}} - 0.3) \cdot 15\text{ms} + \Delta d_s \cdot 10\text{ms}) \cdot D_{\text{mod}}$ | Extended arterial reach delays first reflections, physically expanding perceived virtual room boundaries. |
+| **Colony Vitality & Network Bloom** | **Decay Time** ($T_{60}$) | $T_{60} = \text{baseT}_{60} + (\Delta \text{Mass} \cdot 0.7 + \Delta d_{\text{spread}} \cdot 0.5 + A_{\text{feed}} \cdot 0.4) \cdot D_{\text{mod}}$ | Massive organism blooms open decay length into cavernous space. |
+| **Colony Mass Surge / Boom** | **Impulse Reseed** | Triggers asynchronous background IR rebuild upon population boom | Mitosis bursts inject distinct spatial reflections without halting audio playback. |
+
 
 ---
 

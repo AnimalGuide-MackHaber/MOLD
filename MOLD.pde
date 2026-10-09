@@ -20,11 +20,12 @@ import java.util.concurrent.Executors;
 //   - Audio.pde        : Realtime stereo audio thread, Biquad filter, convolver
 // =============================================================================
 
-final int SIM_W = 420;
-final int SIM_H = 420;
+final int SIM_W = 720;
+final int SIM_H = 720;
 final int GRID_DIM = 8;
-final int MAX_AGENTS = 25000;
-final int INITIAL_AGENTS = 8000;
+final int MAX_AGENTS = 64000;
+final int INITIAL_AGENTS = 16000;
+int targetAgentCount = INITIAL_AGENTS;
 final int MAX_NEWBORNS = 1000;
 
 // Screen layout: Dynamic calculation based on window size and full-screen state
@@ -39,10 +40,10 @@ int lastWinW = 0;
 int lastWinH = 0;
 
 // Simulation Dynamics & Bioenergetics
-float simSpeed = 0.40f;
+float simSpeed = 1.0f;
 float speedAccumulator = 0.0f;
 volatile boolean isPaused = false;
-float sensorDist = 16.0f;
+float sensorDist = 40.0f;
 float sensorAngle = 35.0f * (PI / 180.0f);
 final float turnAngle = 22.0f * (PI / 180.0f);
 final float trailDecay = 0.965f;
@@ -60,14 +61,16 @@ int keyRootIndex = 9; // 0=C, 9=A
 int baseOctave = 2;
 int currentScaleIdx = 0;
 volatile int waveformIdx = 0; // 0=triangle, 1=sine, 2=sawtooth, 3=square
-float filterSens = 1.2f;
-float filterQ = 4.5f;
+float filterSens = 3.0f; // Default to maximum value on start up (range: 0.2f - 3.0f)
+float filterQ = 18.0f;   // Default to maximum value on start up (range: 0.5f - 18.0f)
 float filterBaseHz = 80.0f;
 float filterMaxHz = 3200.0f;
 float vcaSensitivity = 1.0f;
 float vcaGateThreshold = 120.0f;
 boolean showGridOverlay = false;
 int paletteIdx = 0; // 0=yellow (Zorn), 1=mono, 2=cyan
+float visualSharpness = 0.0f;
+float visualBlur = 0.0f; // 0.0=gradient, 1.0=sharp on/off
 
 final String[] NOTE_NAMES = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 final String[] SCALE_NAMES = {"Major Pentatonic", "Minor Pentatonic", "Lydian Mode", "Dorian Mode", "Hirajoshi", "Just Intonation"};
@@ -85,6 +88,12 @@ final float[] JUST_RATIOS = {1.0f, 9.0f/8.0f, 5.0f/4.0f, 11.0f/8.0f, 3.0f/2.0f, 
 // Memory buffers for cellular slime mold
 float[] trailMap;
 float[] nextTrailMap;
+PImage trailTexture;
+
+PGraphics renderFBO;
+PGraphics motionBlurFBO;
+PShader renderShader;
+
 float[] agentX;
 float[] agentY;
 float[] agentHeading;
@@ -101,7 +110,6 @@ float[] cellBiomass = new float[GRID_DIM * GRID_DIM];
 HarmonicData[] cellHarmonics = new HarmonicData[GRID_DIM * GRID_DIM];
 CopyOnWriteArrayList<FoodNodule> foodNodes = new CopyOnWriteArrayList<FoodNodule>();
 
-PImage offscreenFrame;
 float prevColonyEnergy = 0;
 
 // Subsystems
@@ -111,6 +119,12 @@ volatile boolean audioEnabled = false;
 // Velvet-Noise Algorithmic Convolver Reverb
 volatile boolean reverbEnabled = true;
 volatile boolean autoModulateReverb = true;
+volatile float reverbBioModDepth = 2.0f; // Mold bio-modulation depth multiplier (default 2.0x is 2x as pronounced)
+volatile float baseReverbWet = 0.50f;
+volatile float baseReverbDry = 0.80f;
+volatile float baseReverbT60 = 3.5f;
+volatile float baseReverbHighDamping = 0.45f;
+volatile float baseReverbPreDelay = 0.015f;
 volatile float reverbWet = 0.50f;
 volatile float reverbDry = 0.80f;
 volatile float reverbT60 = 3.5f;
@@ -121,6 +135,8 @@ float lastMitosisBiomassThreshold = 8000.0f;
 ExecutorService irExecutor = Executors.newSingleThreadExecutor();
 
 Slider simSpeedSlider;
+int octaveShiftIdx = 1;
+String[] OCTAVE_NAMES = {"-1 OCT", "NORMAL", "+1 OCT"};
 Slider filterSensSlider;
 Slider filterQSlider;
 Slider vcaSensSlider;
@@ -128,11 +144,30 @@ Slider sensorDistSlider;
 Slider bmrSlider;
 Slider locoCostSlider;
 
+Slider reverbBioModSlider;
 Slider reverbWetSlider;
 Slider reverbDrySlider;
 Slider reverbT60Slider;
 Slider reverbDampSlider;
 Slider reverbPreSlider;
+Slider visualSharpnessSlider;
+Slider visualBlurSlider;
+Slider agentCountSlider;
+Slider ledThresholdSlider;
+Slider lpRippleWidthSlider;
+float ledMassThreshold = 120.0f;
+float lpRippleWidth = 3.0f;
+
+// Launchpad LED Display Layers (default: only show slime mold position)
+boolean lpShowSlime = true;
+boolean lpShowFood = false;
+boolean lpShowEating = false;
+
+Toggle lpShowSlimeToggle;
+Toggle lpShowFoodToggle;
+Toggle lpShowEatingToggle;
+Toggle lpRgbModeToggle;
+Toggle lpUserModeToggle;
 
 Toggle pauseToggle;
 Toggle audioToggle;
@@ -152,15 +187,25 @@ MidiHandler midiHandler;
 volatile boolean midiEnabled = false;
 long lastMidiLedUpdate = 0;
 byte[] padDirtyStates = new byte[64];
+volatile boolean pendingReinoculateFboClear = false;
 
 // UI
 UIPanel ui;
 Dropdown midiInDropdown;
 Dropdown midiOutDropdown;
+Dropdown midimixInDropdown;
+Dropdown midimixOutDropdown;
 
-// Toggle full screen mode and recalculate view bounds
+// =============================================================================
+// Window & Display Mode Configuration
+// Default: Native borderless full screen with hardware-accelerated OpenGL.
+// (To run in windowed mode instead, see setup() below).
+// =============================================================================
+
+// Toggle theater / presentation mode (hide sidebar to expand canvas view)
 void toggleFullScreen() {
   isFullScreen = !isFullScreen;
+  if (fullScreenToggle != null) fullScreenToggle.state = isFullScreen;
   recalculateLayout();
 }
 
@@ -179,12 +224,12 @@ void recalculateLayout() {
     sidebarW = 288;
     float margin = 20;
     float gap = 20;
-    float availW = width - sidebarW - margin * 2 - gap;
+    sidebarX = width - sidebarW - margin;
+    float availW = sidebarX - gap - margin;
     float availH = height - margin * 2 - 20;
     canvasS = max(200.0f, min(availW, availH));
-    canvasX = margin;
-    canvasY = margin;
-    sidebarX = canvasX + canvasS + gap;
+    canvasX = margin + max(0.0f, (availW - canvasS) / 2.0f);
+    canvasY = max(margin, (height - canvasS) / 2.0f);
     sidebarH = canvasS;
   }
   if (ui != null) {
@@ -196,16 +241,45 @@ float sidebarY() {
   return isFullScreen ? 16 : canvasY;
 }
 
+void configureNativeFullScreen() {
+  try {
+    processing.core.PApplet.hideMenuBar();
+  } catch (Throwable t) {}
+}
+
 void setup() {
-  size(1060, 760);
-  surface.setTitle("Physarum Polycephalum 8x8 Sonification Matrix");
-  surface.setResizable(true);
-  frameRate(60);
+  // Borderless native full screen with hardware-accelerated OpenGL:
+  fullScreen(P2D);
+  // (To launch in a standard 1060x760 window instead, comment out fullScreen(P2D) above and uncomment below):
+  // size(1060, 760, P2D);
+  pixelDensity(1);
   noSmooth();
 
-  offscreenFrame = createImage(SIM_W, SIM_H, ARGB);
+  surface.setTitle("Physarum Polycephalum 8x8 Sonification Matrix");
+  frameRate(60);
+
+  // Enforce true macOS fullscreen and completely hide menu bar & dock
+  configureNativeFullScreen();
+
+
+  renderFBO = createGraphics(SIM_W, SIM_H, P2D);
+  motionBlurFBO = createGraphics(SIM_W, SIM_H, P2D);
+  renderFBO.noSmooth();
+  motionBlurFBO.noSmooth();
+  renderFBO.beginDraw();
+  renderFBO.background(0);
+  renderFBO.endDraw();
+  motionBlurFBO.beginDraw();
+  motionBlurFBO.background(0);
+  motionBlurFBO.endDraw();
+  
+  renderShader = loadShader("render.glsl");
+  
   trailMap = new float[SIM_W * SIM_H];
   nextTrailMap = new float[SIM_W * SIM_H];
+  trailTexture = createImage(SIM_W, SIM_H, ARGB);
+  trailTexture.loadPixels();
+
   agentX = new float[MAX_AGENTS];
   agentY = new float[MAX_AGENTS];
   agentHeading = new float[MAX_AGENTS];
@@ -228,10 +302,24 @@ void setup() {
 }
 
 void draw() {
+  if (pendingReinoculateFboClear) {
+    pendingReinoculateFboClear = false;
+    if (motionBlurFBO != null) {
+      motionBlurFBO.beginDraw();
+      motionBlurFBO.background(0);
+      motionBlurFBO.endDraw();
+    }
+    if (renderFBO != null) {
+      renderFBO.beginDraw();
+      renderFBO.background(0);
+      renderFBO.endDraw();
+    }
+  }
+
   background(11, 12, 16);
 
   if (!isPaused) {
-    speedAccumulator += simSpeed;
+    speedAccumulator += simSpeed * 0.4f;
     while (speedAccumulator >= 1.0f) {
       stepBioenergetics();
       diffuseAndEvaporate();
@@ -251,7 +339,7 @@ void draw() {
   }
 
   // Draw Simulation Frame
-  image(offscreenFrame, canvasX, canvasY, canvasS, canvasS);
+  
 
   if (showGridOverlay) {
     drawGridOverlay(canvasX, canvasY, canvasS, canvasS);
@@ -263,24 +351,10 @@ void draw() {
     fill(113, 113, 122);
     textSize(9);
     textAlign(LEFT, TOP);
-    text("Click canvas: drop oat nodule  •  Launchpad pads 11-88: drop oats  •  Amber LEDs: food  •  Green/Cyan LEDs: biomass  •  [F]: Full Screen",
+    text("Click canvas: drop oat nodule  •  Launchpad: drop oats  •  MIDImix: control params  •  Amber: food  •  Cyan: biomass  •  [F]: Full Screen",
          canvasX, canvasY + canvasS + 4);
 
     drawSidebarGUI(sidebarX, sidebarY(), sidebarW, sidebarH);
-  } else {
-    // In full screen, show mini toggle button / hint in top-right corner
-    fill(18, 20, 26, 210);
-    stroke(UI_CYAN);
-    rect(width - 150, 12, 138, 24, 4);
-    fill(UI_CYAN);
-    textAlign(CENTER, CENTER);
-    textSize(10);
-    text("EXIT FULL SCREEN [F]", width - 81, 23);
-
-    fill(255, 255, 255, 120);
-    textAlign(LEFT, BOTTOM);
-    textSize(10);
-    text("Click anywhere on canvas to drop oats  •  Press [F] or [ESC] to exit Full Screen", 16, height - 10);
   }
 
   flushLaunchpadLeds();

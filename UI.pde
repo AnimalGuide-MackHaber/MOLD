@@ -20,6 +20,7 @@ final int UI_YELLOW = 0xFFFACC15;
 final int UI_CYAN = 0xFF06B6D4;
 final int UI_GREEN = 0xFF10B981;
 final int UI_RED = 0xFFEF4444;
+final int UI_MAGENTA = 0xFFE879F9;
 
 String fitText(String s, float maxW) {
   if (textWidth(s) <= maxW) return s;

@@ -63,22 +63,36 @@ $$\text{note} = (8 - r) \cdot 10 + (c + 1)$$
 
 Pressing any grid pad spawns a new oat food nodule on the corresponding canvas cell with randomized sub-pixel jitter.
 
-### Hardware LED Feedback & Zorn Palette
+### Side Buttons (Transport & LED Layer Controls)
+
+The vertical column of round buttons along the right edge of the Launchpad (Scene Launch column) provides physical tactile triggers for transport and LED display layer controls:
+
+| Physical Control | MIDI CC | Action / Functional Target | Hardware LED Feedback |
+|:---|:---|:---|:---|
+| **Top Side Button (Scene 1)** | `CC 89` | Re-Inoculate Mold (Keep Food) | Soft Yellow (`15`) idle, Brilliant Yellow (`13`) on press |
+| **Second Side Button (Scene 2)** | `CC 79` | Clear All Food (Silence Voices) | Soft Red (`7`) idle, Brilliant Vermilion (`5`) on press |
+| **3rd from Bottom Button (Scene 6)** | `CC 39` | Toggle Slime Mold LED Layer | Lit Bright Yellow (`13`) when ON, Off (`0`) when OFF |
+| **2nd from Bottom Button (Scene 7)** | `CC 29` | Toggle Food Nodule LED Layer | Lit Electric Cyan (`37`) when ON, Off (`0`) when OFF |
+| **Bottom Side Button (Scene 8)** | `CC 19` | Toggle Consumption / Eating LED Layer | Lit Brilliant Magenta (`53`) when ON, Off (`0`) when OFF |
+
+### Hardware LED Feedback & Trilateral Aesthetic
 
 To prevent flooding the USB-MIDI bus, a 64-byte array `padDirtyStates[64]` caches current pad colors. Updates are rate-limited to $\approx 22\text{ Hz}$ ($45\text{ ms}$ interval), transmitting only when a cell state changes.
 
-Pads are illuminated using Novation's velocity color palette, mapped to the Zorn aesthetic:
+Pads are illuminated using Novation's velocity color palette, mapped across three maximally distinct color domains:
 
 | Grid Feature | State | Velocity Code | Hardware Color |
 |:---|:---|:---|:---|
-| **Food Nodule** | Idle (not being eaten) | `3` | Solid White |
-| **Food Nodule** | Fresh / High Nutrient ($>65\%$) | `5` | Vermilion Red |
-| **Food Nodule** | Mid Nutrient ($35\% - 65\%$) | `9` | Warm Orange |
-| **Food Nodule** | Depleting ($<35\%$) | `13` | Yellow |
-| **Slime Mold Colony** | Heavy Biomass ($>450\text{ u}$) | `13` | Bright Yellow |
-| **Slime Mold Colony** | Medium Biomass ($>200\text{ u}$) | `15` | Soft Yellow |
+| **Food Nodule** | Idle (not being eaten) | `37` | Luminous Electric Cyan (Pulsing) |
+| **Food Nodule** | Actively Eaten - High Nutrient ($>65\%$) | `53` | Brilliant Magenta (Pulsing) |
+| **Food Nodule** | Actively Eaten - Mid Nutrient ($35\% - 65\%$) | `54` | Deep Magenta (Pulsing) |
+| **Food Nodule** | Actively Eaten - Low Nutrient ($15\% - 35\%$) | `55` | Medium Purple (Pulsing) |
+| **Food Nodule** | Actively Eaten - Depleting ($<15\%$) | `52` | Soft Lavender (Pulsing) |
+| **Slime Mold Colony** | Heavy Biomass ($>450\text{ u}$) | `12` / `13` | Brilliant Yellow |
+| **Slime Mold Colony** | Medium Biomass ($>200\text{ u}$) | `14` / `15` | Golden Yellow / Soft Amber |
 | **Slime Mold Colony** | Active Margin ($>80\text{ u}$) | `62` | Warm Ochre |
 | **Slime Mold Colony** | Exploratory Vein ($>25\text{ u}$) | `84` | Faint Amber |
+| **Slime Mold Colony** | Marginal Margin ($\approx 10\text{ u}$) | `11` | Faint Amber (Pulsing) |
 | **Empty Substrate** | No mass / no food | `0` | LED Off |
 
 ---
