@@ -460,6 +460,8 @@ class AudioEngine extends Thread {
       byte[] silence = new byte[BUFFER_SAMPLES * 4];
       float[] inL = new float[BUFFER_SAMPLES];
       float[] inR = new float[BUFFER_SAMPLES];
+      float[] dryL = new float[BUFFER_SAMPLES];
+      float[] dryR = new float[BUFFER_SAMPLES];
       float[] outL = new float[BUFFER_SAMPLES];
       float[] outR = new float[BUFFER_SAMPLES];
       float[] masterOutL = new float[BUFFER_SAMPLES];
@@ -487,30 +489,37 @@ class AudioEngine extends Thread {
         int wave = waveformIdx; // read once per buffer
         float voiceScale = computeVoiceScale();
 
-        // Clear input block buffers
+        // Clear input & direct block buffers
         for (int i = 0; i < BUFFER_SAMPLES; i++) {
           inL[i] = 0.0f;
           inR[i] = 0.0f;
+          dryL[i] = 0.0f;
+          dryR[i] = 0.0f;
         }
 
-        // Render each active voice into stereo input buffer
+        // Render each active voice into direct (dry) and diffuse reverb (in) buffers
         for (int v = 0; v < foodNodes.size(); v++) {
           FoodNodule fn;
           try {
             fn = foodNodes.get(v);
           } catch (IndexOutOfBoundsException e) { break; }
           
-          if (fn.vcaGain >= 0.001f) {
-            renderVoiceToBuffer(fn, inL, inR, voiceScale, wave, sineTable);
+          boolean active = bellAcousticsMode ? (fn.getBellTotalEnergy() >= 0.0005f || fn.vcaGain >= 0.001f) : (fn.vcaGain >= 0.001f);
+          if (active) {
+            renderVoiceToBuffer(fn, dryL, dryR, inL, inR, voiceScale, wave, sineTable);
           }
         }
 
         // Real-Time UP-OLA Velvet Noise Convolver
         if (reverbEnabled && convolver != null && convolver.isLoaded()) {
-          convolver.processBlock(inL, inR, outL, outR, reverbWet, reverbDry);
+          convolver.processBlock(inL, inR, outL, outR, reverbWet, 0.0f);
+          for (int i = 0; i < BUFFER_SAMPLES; i++) {
+            outL[i] += dryL[i] * reverbDry;
+            outR[i] += dryR[i] * reverbDry;
+          }
         } else {
-          System.arraycopy(inL, 0, outL, 0, BUFFER_SAMPLES);
-          System.arraycopy(inR, 0, outR, 0, BUFFER_SAMPLES);
+          System.arraycopy(dryL, 0, outL, 0, BUFFER_SAMPLES);
+          System.arraycopy(dryR, 0, outR, 0, BUFFER_SAMPLES);
         }
 
         // Master Dynamics Limiter (Studio Compressor + Lookahead Peak Limiter)
@@ -532,14 +541,15 @@ class AudioEngine extends Thread {
     for (int v = 0; v < foodNodes.size(); v++) {
       try {
         FoodNodule fn = foodNodes.get(v);
-        if (fn.vcaGain >= 0.001f) activeVoices++;
+        boolean active = bellAcousticsMode ? (fn.getBellTotalEnergy() >= 0.0005f || fn.vcaGain >= 0.001f) : (fn.vcaGain >= 0.001f);
+        if (active) activeVoices++;
       } catch (IndexOutOfBoundsException e) { break; }
     }
     return (activeVoices > 0) ? (0.24f / (float) Math.sqrt(Math.max(1.0, activeVoices * 0.75))) : 0.24f;
   }
 
-  // Render a single food nodule voice into the stereo block buffer
-  void renderVoiceToBuffer(FoodNodule fn, float[] inL, float[] inR, float voiceScale, int wave, float[] sineTable) {
+  // Render a single food nodule voice into direct (dry) and diffuse reverb (verb) stereo block buffers
+  void renderVoiceToBuffer(FoodNodule fn, float[] dryL, float[] dryR, float[] verbL, float[] verbR, float voiceScale, int wave, float[] sineTable) {
     float dx = spatialNormalizedDx(fn.x);
     float dy = spatialNormalizedDy(fn.y);
 
@@ -551,69 +561,145 @@ class AudioEngine extends Thread {
     float panL = (float) Math.cos(panAngle);
     float panR = (float) Math.sin(panAngle);
 
-    // Distance attenuation (subtle acoustic roll-off towards grid corners)
+    // Distance attenuation and acoustic perspective from virtual listener in center chair
     float distNorm = (float) Math.sqrt(dx * dx + dy * dy);
-    float distGain = 1.0f / (1.0f + distNorm * 0.25f);
+    float distGain = 1.0f / (1.0f + distNorm * (0.35f + 0.35f * binauralDepth));
 
-    float voiceGainL = fn.vcaGain * voiceScale * panL * distGain;
-    float voiceGainR = fn.vcaGain * voiceScale * panR * distGain;
+    float voiceAmp = bellAcousticsMode ? 1.0f : fn.vcaGain;
+    float voiceGainL = voiceAmp * voiceScale * panL * distGain;
+    float voiceGainR = voiceAmp * voiceScale * panR * distGain;
     float phaseInc = fn.frequency / SAMPLE_RATE;
 
-    int itdDelay = (int) (Math.abs(bShaped) * 18.0f);
+    // Direct-to-Reverberant Ratio (DRR):
+    // Sources near the listener are dry and intimate; distant sources excite more diffuse room reverb
+    float directFactor = 1.0f / (1.0f + distNorm * 0.40f * binauralDepth);
+    float verbFactor = 0.30f + 0.70f * constrain(distNorm * 0.85f, 0.0f, 1.0f) * binauralDepth;
+
+    // 3D Haas / ITD micro-delay (Interaural Time Difference):
+    // Standard human head maximum ITD is ~0.65-0.70ms (~29-31 samples at 44.1kHz).
+    // binauralDepth macro scales delay from 0.0x (bypassed) up to 2.0x (hyper-binaural ~60 samples).
+    float itdDelay = Math.abs(bShaped) * (30.0f * binauralDepth);
     boolean delayRight = (bShaped < 0.0f); // Source is on left -> right ear is delayed
 
-    BiquadFilter.Coeffs cL = fn.filter.coeffs;
-    BiquadFilter.Coeffs cR = fn.filterR.coeffs;
+    BiquadFilter.Coeffs cVoice = fn.filter.coeffs;
     BiquadFilter.Coeffs cElev = fn.pinnaElevationFilter.coeffs;
     BiquadFilter.Coeffs cFB = fn.frontBackFilter.coeffs;
+    BiquadFilter.Coeffs cAir = fn.airDampFilter.coeffs;
+    BiquadFilter.Coeffs cHSL = fn.headShadowL.coeffs;
+    BiquadFilter.Coeffs cHSR = fn.headShadowR.coeffs;
+
+    // Pre-calculate block-rate modal decay & sustain targets for bell acoustics
+    if (bellAcousticsMode) {
+      float dtBlock = (float) BUFFER_SAMPLES / SAMPLE_RATE;
+      float nutRatio = (fn.initialCapacity > 0.0f) ? constrain(fn.nutrients / fn.initialCapacity, 0.0f, 1.0f) : 0.0f;
+      float sustainDrive = (fn.isBeingEaten && !fn.isDepleted) ? (fn.vcaGain * bellSustainLevel * (0.5f + 0.5f * nutRatio)) : 0.0f;
+
+      for (int p = 0; p < BELL_NUM_PARTIALS; p++) {
+        float f_p = fn.frequency * BELL_RATIOS[p];
+        fn.bellPhaseIncs[p] = f_p / SAMPLE_RATE;
+        fn.bellCurAmp[p] = fn.bellAmps[p];
+
+        if (f_p >= SAMPLE_RATE * 0.45f) {
+          fn.bellRampAmp[p] = -fn.bellAmps[p] / BUFFER_SAMPLES;
+          fn.bellAmps[p] = 0.0f;
+          continue;
+        }
+
+        // Physical decay time constant tau_i = Q_i / (pi * f_i)
+        float tau_p = (bellQ * BELL_Q_MULTS[p]) / ((float) Math.PI * Math.max(20.0f, f_p));
+        tau_p = constrain(tau_p, 0.05f, 15.0f);
+        float decayFactor = (float) Math.exp(-dtBlock / tau_p);
+
+        // Steady-state sustain target during feeding vs exponential decay when released
+        float targetS = BELL_SUSTAIN_WEIGHTS[p] * sustainDrive;
+        float endAmp;
+        if (fn.bellCurAmp[p] < targetS) {
+          endAmp = fn.bellCurAmp[p] + (targetS - fn.bellCurAmp[p]) * 0.18f; // Smooth swelling into sustain
+        } else {
+          endAmp = targetS + (fn.bellCurAmp[p] - targetS) * decayFactor; // Physical decay towards sustain
+        }
+        if (endAmp < 0.0001f) endAmp = 0.0f;
+
+        fn.bellRampAmp[p] = (endAmp - fn.bellCurAmp[p]) / (float) BUFFER_SAMPLES;
+        fn.bellAmps[p] = endAmp;
+      }
+    }
 
     for (int i = 0; i < BUFFER_SAMPLES; i++) {
       float raw;
-      switch (wave) {
-        case 0: // Triangle
-          raw = (fn.phase < 0.5f) ? (4.0f * fn.phase - 1.0f) : (3.0f - 4.0f * fn.phase);
-          break;
-        case 1: // Sine
-          raw = sineTable[(int)(fn.phase * 4096f) & 4095];
-          break;
-        case 2: // Sawtooth
-          raw = 2.0f * fn.phase - 1.0f;
-          break;
-        default: // Square
-          raw = (fn.phase < 0.5f) ? 0.8f : -0.8f;
-          break;
+      if (bellAcousticsMode) {
+        float rawBell = 0.0f;
+        for (int p = 0; p < BELL_NUM_PARTIALS; p++) {
+          fn.bellCurAmp[p] += fn.bellRampAmp[p];
+          int lutIdx = (int)(fn.bellPhases[p] * 4096.0f) & 4095;
+          rawBell += fn.bellCurAmp[p] * sineTable[lutIdx];
+          fn.bellPhases[p] += fn.bellPhaseIncs[p];
+          if (fn.bellPhases[p] >= 1.0f) fn.bellPhases[p] -= 1.0f;
+        }
+        raw = rawBell * 0.35f; // Nominal headroom matching
+      } else {
+        switch (wave) {
+          case 0: // Triangle
+            raw = (fn.phase < 0.5f) ? (4.0f * fn.phase - 1.0f) : (3.0f - 4.0f * fn.phase);
+            break;
+          case 1: // Sine
+            raw = sineTable[(int)(fn.phase * 4096f) & 4095];
+            break;
+          case 2: // Sawtooth
+            raw = 2.0f * fn.phase - 1.0f;
+            break;
+          default: // Square
+            raw = (fn.phase < 0.5f) ? 0.8f : -0.8f;
+            break;
+        }
+
+        fn.phase += phaseInc;
+        if (fn.phase >= 1.0f) fn.phase -= 1.0f;
       }
 
-      fn.phase += phaseInc;
-      if (fn.phase >= 1.0f) fn.phase -= 1.0f;
+      // 1. Core resonant voice lowpass filter (synthesizer tone shaped by food capacity & user Q)
+      float voiceSig = fn.filter.process(raw, cVoice);
 
-      // 1. Slime mold biomass elevation notch filter (HRTF vertical pinna cue)
-      float shapedSig = fn.pinnaElevationFilter.process(raw, cElev);
+      // 2. Slime mold biomass elevation notch filter (HRTF vertical pinna cue)
+      float shapedSig = fn.pinnaElevationFilter.process(voiceSig, cElev);
 
-      // 2. Front vs Back pinna spectral tilt filter (high-shelf forward presence / rear shadow)
+      // 3. Front vs Back pinna spectral tilt filter (high-shelf forward presence / rear shadow)
       shapedSig = fn.frontBackFilter.process(shapedSig, cFB);
 
-      // 3. Stereo head-shadow biquad processing
-      float sigL = fn.filter.process(shapedSig, cL);
-      float sigR = fn.filterR.process(shapedSig, cR);
+      // 4. Distance air-absorption filter (atmospheric high-frequency damping over distance)
+      shapedSig = fn.airDampFilter.process(shapedSig, cAir);
 
-      // 4. Haas micro-delay for 3D binaural spatial depth
-      if (itdDelay > 0) {
-        int wIdx = fn.delayIdx;
-        fn.delayBufL[wIdx] = sigL;
-        fn.delayBufR[wIdx] = sigR;
-        int rIdx = (wIdx - itdDelay + 32) & 31;
-        fn.delayIdx = (wIdx + 1) & 31;
+      // 5. Spherical Head Shadow Filters (Frequency-dependent ILD for Left and Right ears)
+      float sigL = fn.headShadowL.process(shapedSig, cHSL);
+      float sigR = fn.headShadowR.process(shapedSig, cHSR);
+
+      // 6. Sub-sample fractional Haas micro-delay for 3D binaural spatial depth (smooth ITD)
+      int wIdx = fn.delayIdx;
+      fn.delayBufL[wIdx] = sigL;
+      fn.delayBufR[wIdx] = sigR;
+      fn.delayIdx = (wIdx + 1) & 127;
+
+      if (itdDelay > 0.01f) {
+        float rPos = (float)wIdx - itdDelay;
+        while (rPos < 0.0f) rPos += 128.0f;
+        int r0 = ((int) rPos) & 127;
+        int r1 = (r0 + 1) & 127;
+        float frac = rPos - (float)((int) rPos);
 
         if (delayRight) {
-          sigR = fn.delayBufR[rIdx];
+          sigR = fn.delayBufR[r0] * (1.0f - frac) + fn.delayBufR[r1] * frac;
         } else {
-          sigL = fn.delayBufL[rIdx];
+          sigL = fn.delayBufL[r0] * (1.0f - frac) + fn.delayBufL[r1] * frac;
         }
       }
 
-      inL[i] += sigL * voiceGainL;
-      inR[i] += sigR * voiceGainR;
+      float dryVoiceL = sigL * voiceGainL * directFactor;
+      float dryVoiceR = sigR * voiceGainR * directFactor;
+      dryL[i] += dryVoiceL;
+      dryR[i] += dryVoiceR;
+
+      verbL[i] += sigL * voiceGainL * verbFactor;
+      verbR[i] += sigR * voiceGainR * verbFactor;
     }
   }
 

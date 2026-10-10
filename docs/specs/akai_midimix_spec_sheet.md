@@ -28,16 +28,16 @@ To mutate the state of any supported button LED, send an identical **Note On** m
 * **Message Type:** MIDI CC (`0xB0` on Channel 1)
 * **Value Range:** `[0, 127]`
 
-| Channel Strip (1-Indexed) | Top Row (CC #) | Middle Row (CC #) | Bottom Row (CC #) |
+| Channel Strip (1-Indexed) | Top Row (Row 1) | Middle Row (Row 2) | Bottom Row (Row 3) |
 |:---|:---|:---|:---|
-| Track 1 | 16 (`0x10`) | 20 (`0x14`) | 24 (`0x18`) |
-| Track 2 | 17 (`0x11`) | 21 (`0x15`) | 25 (`0x19`) |
-| Track 3 | 18 (`0x12`) | 22 (`0x16`) | 26 (`0x1A`) |
-| Track 4 | 19 (`0x13`) | 23 (`0x17`) | 27 (`0x1B`) |
-| Track 5 | 12 (`0x0C`) | 14 (`0x0E`) | 46 (`0x2E`) |
-| Track 6 | 13 (`0x0D`) | 15 (`0x0F`) | 47 (`0x2F`) |
-| Track 7 | 14 (`0x0E`) | 44 (`0x2C`) | 48 (`0x30`) |
-| Track 8 | 15 (`0x0F`) | 45 (`0x2D`) | 49 (`0x31`) |
+| Track 1 | 16 (`0x10`) | 17 (`0x11`) | 18 (`0x12`) |
+| Track 2 | 20 (`0x14`) | 21 (`0x15`) | 22 (`0x16`) |
+| Track 3 | 24 (`0x18`) | 25 (`0x19`) | 26 (`0x1A`) |
+| Track 4 | 28 (`0x1C`) | 29 (`0x1D`) | 30 (`0x1E`) |
+| Track 5 | 46 (`0x2E`) | 47 (`0x2F`) | 48 (`0x30`) |
+| Track 6 | 50 (`0x32`) | 51 (`0x33`) | 52 (`0x34`) |
+| Track 7 | 54 (`0x36`) | 55 (`0x37`) | 56 (`0x38`) |
+| Track 8 | 58 (`0x3A`) | 59 (`0x3B`) | 60 (`0x3C`) |
 
 ### 3.2 Faders (Continuous Controllers)
 * **Message Type:** MIDI CC (`0xB0` on Channel 1)
@@ -48,33 +48,27 @@ To mutate the state of any supported button LED, send an identical **Note On** m
 | Fader Track 1 | 19 | `0x13` |
 | Fader Track 2 | 23 | `0x17` |
 | Fader Track 3 | 27 | `0x1B` |
-| Fader Track 4 | 28 | `0x1C` |
-| Fader Track 5 | 29 | `0x1D` |
-| Fader Track 6 | 30 | `0x1E` |
-| Fader Track 7 | 31 | `0x1F` |
-| Fader Track 8 | 33 | `0x21` |
-| Master Fader | 11 | `0x0B` |
+| Fader Track 4 | 31 | `0x1F` |
+| Fader Track 5 | 49 | `0x31` |
+| Fader Track 6 | 53 | `0x35` |
+| Fader Track 7 | 57 | `0x39` |
+| Fader Track 8 | 61 | `0x3D` |
+| Master Fader  | 62 | `0x3E` |
 
 ### 3.3 Buttons & Accompanying LEDs
 * **Message Type (Input & Output):** Note On / Note Off (`0x90` / `0x80` status bytes for incoming data)
 * **Value Range:** `[0, 127]` (Note velocities)
 
-| Track Strip | Mute Button Note (Row 1) | Mute Note (Hex) | Rec Arm Button Note (Row 2) | Rec Arm Note (Hex) | Has LED? |
-|:---|:---|:---|:---|:---|:---|
-| Track 1 | 1 (C#-1) | `0x01` | 3 (D#-1) | `0x03` | Yes |
-| Track 2 | 4 (E-1) | `0x04` | 6 (F#-1) | `0x06` | Yes |
-| Track 3 | 7 (G-1) | `0x07` | 9 (A-1) | `0x09` | Yes |
-| Track 4 | 10 (A#-1) | `0x0A` | 12 (B-1) | `0x0C` | Yes |
-| Track 5 | 13 (C0) | `0x0D` | 15 (D#0) | `0x0F` | Yes |
-| Track 6 | 16 (E0) | `0x10` | 18 (F#0) | `0x12` | Yes |
-| Track 7 | 19 (G0) | `0x13` | 21 (A0) | `0x15` | Yes |
-| Track 8 | 22 (A#0) | `0x16` | 24 (B0) | `0x18` | Yes |
-
-*Correction Note on Track 8:* 
-* Mute Track 8 default note value is **22 (`0x16`)**
-* Rec Arm Track 8 default note value is **24 (`0x18`)**
-
-Let's output the corrected precise lookup map below.
+| Track Strip | Mute (Row 1) | Solo (Row 2) | Rec Arm (Row 3) | Has LED? |
+|:---|:---|:---|:---|:---|
+| Track 1 | Note 1 (`0x01`) | Note 2 (`0x02`) | Note 3 (`0x03`) | Mute / Rec Arm |
+| Track 2 | Note 4 (`0x04`) | Note 5 (`0x05`) | Note 6 (`0x06`) | Mute / Rec Arm |
+| Track 3 | Note 7 (`0x07`) | Note 8 (`0x08`) | Note 9 (`0x09`) | Mute / Rec Arm |
+| Track 4 | Note 10 (`0x0A`) | Note 11 (`0x0B`) | Note 12 (`0x0C`) | Mute / Rec Arm |
+| Track 5 | Note 13 (`0x0D`) | Note 14 (`0x0E`) | Note 15 (`0x0F`) | Mute / Rec Arm |
+| Track 6 | Note 16 (`0x10`) | Note 17 (`0x11`) | Note 18 (`0x12`) | Mute / Rec Arm |
+| Track 7 | Note 19 (`0x13`) | Note 20 (`0x14`) | Note 21 (`0x15`) | Mute / Rec Arm |
+| Track 8 | Note 22 (`0x16`) | Note 23 (`0x17`) | Note 24 (`0x18`) | Mute / Rec Arm |
 
 ---
 
@@ -86,30 +80,25 @@ Let's output the corrected precise lookup map below.
   "default_midi_channel_zero_indexed": 0,
   "controls": {
     "knobs": {
-      "row_top":    [16, 17, 18, 19, 12, 13, 14, 15],
-      "row_middle": [20, 21, 22, 23, 14, 15, 44, 45],
-      "row_bottom": [24, 25, 26, 27, 46, 47, 48, 49]
+      "row_top":    [16, 20, 24, 28, 46, 50, 54, 58],
+      "row_middle": [17, 21, 25, 29, 47, 51, 55, 59],
+      "row_bottom": [18, 22, 26, 30, 48, 52, 56, 60]
     },
     "faders": {
-      "channels": [19, 23, 27, 28, 29, 30, 31, 33],
-      "master": 11
+      "channels": [19, 23, 27, 31, 49, 53, 57, 61],
+      "master": 62
     },
     "buttons": {
-      "mute_row_notes": [1, 4, 7, 10, 13, 16, 19, 22],
-      "rec_arm_notes":  [3, 6, 9, 12, 15, 18, 21, 24],
-      "utility": {
-        "bank_left": 25,
-        "bank_right": 26,
-        "solo_mode": 27,
-        "send_all_cc": 82
-      }
+      "mute_row_notes":    [1, 4, 7, 10, 13, 16, 19, 22],
+      "solo_row_notes":    [2, 5, 8, 11, 14, 17, 20, 23],
+      "rec_arm_row_notes": [3, 6, 9, 12, 15, 18, 21, 24]
     }
   },
   "led_protocol": {
     "status_byte_hex": "0x90",
     "velocity_on_max": 127,
     "velocity_off": 0,
-    "addressable_arrays": ["mute_row_notes", "rec_arm_notes"]
+    "addressable_arrays": ["mute_row_notes", "rec_arm_row_notes"]
   }
 }
 ```

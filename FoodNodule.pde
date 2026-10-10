@@ -39,18 +39,29 @@ class FoodNodule {
   int hz;
   float grazingBuffer = 0.0f;
   boolean isBeingEaten = false;
+  boolean wasBeingEaten = false;
+  boolean isDepleted = false;
   float consumptionActivity = 0.0f; // Smooth transition for visual feedback
   volatile float vcaGain = 0.0f;
   float lpfCutoff = 80.0f;
   BiquadFilter filter;
-  BiquadFilter filterR;
+  BiquadFilter headShadowL;
+  BiquadFilter headShadowR;
+  BiquadFilter airDampFilter;
   BiquadFilter pinnaElevationFilter;
   BiquadFilter frontBackFilter;
-  final float[] delayBufL = new float[32];
-  final float[] delayBufR = new float[32];
+  final float[] delayBufL = new float[128];
+  final float[] delayBufR = new float[128];
   int delayIdx = 0;
   float phase = 0.0f;
   volatile float elevationNorm = 0.0f; // 0.0 = ear level / horizon, 1.0 = zenith / overhead
+
+  // Multi-modal inharmonic bell synthesis state
+  final float[] bellPhases = new float[BELL_NUM_PARTIALS];
+  final float[] bellAmps = new float[BELL_NUM_PARTIALS];
+  final float[] bellCurAmp = new float[BELL_NUM_PARTIALS];
+  final float[] bellRampAmp = new float[BELL_NUM_PARTIALS];
+  final float[] bellPhaseIncs = new float[BELL_NUM_PARTIALS];
 
   FoodNodule(float px, float py, float r, float cap) {
     x = px;
@@ -64,9 +75,36 @@ class FoodNodule {
 
     applyHarmonics();
     filter = new BiquadFilter();
-    filterR = new BiquadFilter();
+    headShadowL = new BiquadFilter();
+    headShadowR = new BiquadFilter();
+    airDampFilter = new BiquadFilter();
     pinnaElevationFilter = new BiquadFilter();
     frontBackFilter = new BiquadFilter();
+
+    for (int p = 0; p < BELL_NUM_PARTIALS; p++) {
+      bellPhases[p] = (float) Math.random();
+      bellAmps[p] = 0.0f;
+    }
+  }
+
+  // Strike excitation: impacts all vibrational modes with characteristic bell strike amplitudes
+  void strike(float velocity) {
+    if (velocity <= 0.0f) return;
+    for (int p = 0; p < BELL_NUM_PARTIALS; p++) {
+      float sAmp = BELL_STRIKE_AMPS[p] * velocity;
+      if (sAmp > bellAmps[p]) {
+        bellAmps[p] = sAmp;
+      }
+    }
+  }
+
+  // Total instantaneous vibrational energy across all harmonic modes
+  float getBellTotalEnergy() {
+    float sum = 0.0f;
+    for (int p = 0; p < BELL_NUM_PARTIALS; p++) {
+      sum += bellAmps[p];
+    }
+    return sum;
   }
 
   void applyHarmonics() {
@@ -87,17 +125,36 @@ class FoodNodule {
   void updateSpatialFilters() {
     float dx = spatialNormalizedDx(x);
     float dy = spatialNormalizedDy(y);
+    float distNorm = (float) Math.sqrt(dx * dx + dy * dy);
 
-    // Lateral azimuth head-shadow tilt on left/right ears
-    float cutoffL = constrain(lpfCutoff * (1.0f - dx * 0.18f), 40.0f, 18000.0f);
-    float cutoffR = constrain(lpfCutoff * (1.0f + dx * 0.18f), 40.0f, 18000.0f);
-    filter.setLowPass(cutoffL, filterQ, 44100.0f);
-    filterR.setLowPass(cutoffR, filterQ, 44100.0f);
+    // 1. Core voice resonant lowpass filter (full acoustic nutrient sweep & user resonance)
+    filter.setLowPass(lpfCutoff, filterQ, 44100.0f);
 
-    // Front/Back Spectral Pinna Cues:
-    // Rear shadowing (high-shelf cut up to -4.5dB above 3.8kHz) vs front presence (+1.5dB above 4kHz)
-    float frontBackGainDb = (dy >= 0.0f) ? (dy * 1.5f) : (dy * 4.5f);
-    frontBackFilter.setHighShelf(4000.0f, frontBackGainDb, 44100.0f);
+    // 2. Frequency-Dependent Interaural Level Difference (Spherical Head Shadow Model)
+    // Rayleigh / Duda-Martens model: ~2.2kHz transition frequency
+    // Contralateral ear gets deep acoustic skull shadow (-9.0dB at 1.0x, up to -16dB at 2.0x)
+    // Ipsilateral ear gets pinna presence boost (+1.5dB at 1.0x, up to +3.0dB at 2.0x)
+    float bShaped = spatialShapedBipolar(dx);
+    float absB = Math.abs(bShaped);
+    float depth = binauralDepth;
+
+    float ipsiGain = 1.5f * absB * depth;
+    float contraCut = -9.0f * absB * depth;
+
+    float gainDbL = (bShaped <= 0.0f) ? ipsiGain : contraCut;
+    float gainDbR = (bShaped >= 0.0f) ? ipsiGain : contraCut;
+
+    headShadowL.setHighShelf(2200.0f, gainDbL, 44100.0f);
+    headShadowR.setHighShelf(2200.0f, gainDbR, 44100.0f);
+
+    // 3. Front/Back Spectral Pinna Cues:
+    // Forward presence (+2.0dB at 1.0x) vs rear pinna shadow (-7.5dB at 1.0x, up to -15dB at 2.0x)
+    float frontBackGainDb = (dy >= 0.0f) ? (dy * 2.0f * depth) : (dy * 7.5f * depth);
+    frontBackFilter.setHighShelf(3800.0f, frontBackGainDb, 44100.0f);
+
+    // 4. Distance Air Absorption Filter (Atmospheric high-frequency roll-off across space)
+    float airLossDb = -constrain(distNorm * 4.2f * depth, 0.0f, 12.0f);
+    airDampFilter.setHighShelf(4500.0f, airLossDb, 44100.0f);
   }
 
   // Slime Mold Mass -> 3D Height / Elevation notch filter
@@ -131,5 +188,8 @@ class FoodNodule {
 
 void addFoodNodule(float x, float y, float r, float cap) {
   FoodNodule fn = new FoodNodule(x, y, r, cap);
+  if (bellAcousticsMode && bellStrikeIntensity > 0.0f) {
+    fn.strike(0.6f * bellStrikeIntensity);
+  }
   foodNodes.add(fn);
 }

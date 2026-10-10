@@ -61,6 +61,22 @@ int keyRootIndex = 9; // 0=C, 9=A
 int baseOctave = 2;
 int currentScaleIdx = 0;
 volatile int waveformIdx = 0; // 0=triangle, 1=sine, 2=sawtooth, 3=square
+
+// Bell Acoustics & Inharmonic Modal Decay
+volatile boolean bellAcousticsMode = true; // Modeled carillon bell multi-modal synthesis
+volatile float bellQ = 1800.0f;            // Bell Quality Factor (controls physical decay duration, 500 - 5000)
+volatile float bellSustainLevel = 1.0f;    // Sustain amplitude multiplier when slime mold eats (0.2x - 2.0x)
+volatile float bellStrikeIntensity = 1.0f; // Clapper impact velocity on contact/spawn (0.0x - 2.0x)
+
+// Simpson carillon bell modal synthesis parameters:
+// 0: Hum (sub-octave, 0.5x), 1: Prime (fundamental, 1.0x), 2: Tierce (minor 3rd, ~1.19x)
+// 3: Quint (fifth, ~1.50x), 4: Nominal (octave, 2.0x), 5: Decime (strike inharmonic mode, 2.74x)
+final int BELL_NUM_PARTIALS = 6;
+final float[] BELL_RATIOS = {0.50f, 1.00f, 1.1892f, 1.4983f, 2.00f, 2.74f};
+final float[] BELL_STRIKE_AMPS = {0.45f, 0.65f, 0.75f, 0.85f, 1.00f, 0.90f};
+final float[] BELL_SUSTAIN_WEIGHTS = {0.60f, 0.80f, 0.70f, 0.50f, 0.35f, 0.05f};
+final float[] BELL_Q_MULTS = {1.0f, 1.0f, 1.0f, 1.0f, 0.9f, 0.35f};
+
 float filterSens = 3.0f; // Default to maximum value on start up (range: 0.2f - 3.0f)
 float filterQ = 18.0f;   // Default to maximum value on start up (range: 0.5f - 18.0f)
 float filterBaseHz = 80.0f;
@@ -69,6 +85,7 @@ float vcaSensitivity = 1.0f;
 float vcaGateThreshold = 120.0f;
 boolean showGridOverlay = false;
 int paletteIdx = 0; // 0=yellow (Zorn), 1=mono, 2=cyan
+int gradientColorCount = 3; // 1 to 8 colors representing mold mass (default 3)
 float visualSharpness = 0.0f;
 float visualBlur = 0.0f; // 0.0=gradient, 1.0=sharp on/off
 
@@ -137,9 +154,11 @@ ExecutorService irExecutor = Executors.newSingleThreadExecutor();
 Slider simSpeedSlider;
 int octaveShiftIdx = 1;
 String[] OCTAVE_NAMES = {"-1 OCT", "NORMAL", "+1 OCT"};
+volatile float binauralDepth = 1.0f; // 3D Binaural intensity macro (1.0x = natural human HRTF, 2.0x = hyper-binaural)
 Slider filterSensSlider;
 Slider filterQSlider;
 Slider vcaSensSlider;
+Slider binauralDepthSlider;
 Slider sensorDistSlider;
 Slider bmrSlider;
 Slider locoCostSlider;
@@ -152,6 +171,7 @@ Slider reverbDampSlider;
 Slider reverbPreSlider;
 Slider visualSharpnessSlider;
 Slider visualBlurSlider;
+Slider gradientColorsSlider;
 Slider agentCountSlider;
 Slider ledThresholdSlider;
 Slider lpRippleWidthSlider;
@@ -174,6 +194,10 @@ Toggle audioToggle;
 Toggle fullScreenToggle;
 Toggle hwLinkToggle;
 Toggle gridOverlayToggle;
+Toggle bellAcousticsToggle;
+Slider bellQSlider;
+Slider bellSustainSlider;
+Slider bellStrikeSlider;
 Toggle reverbToggle;
 Toggle bioModToggle;
 
@@ -197,6 +221,11 @@ Dropdown midiInDropdown;
 Dropdown midiOutDropdown;
 Dropdown midimixInDropdown;
 Dropdown midimixOutDropdown;
+Dropdown rootKeyDropdown;
+Dropdown scaleDropdown;
+RadioGroup octaveRadio;
+RadioGroup waveformRadio;
+RadioGroup paletteRadio;
 
 // =============================================================================
 // Window & Display Mode Configuration

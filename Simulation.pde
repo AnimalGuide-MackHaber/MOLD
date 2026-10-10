@@ -112,7 +112,15 @@ void applyAccumulatedGrazing(FoodNodule[] foods, int[] foodHits, int nFood) {
   for (int f = 0; f < nFood; f++) {
     if (foodHits[f] > 0) {
       foods[f].grazingBuffer += grazingRate * foodHits[f];
+      if (!foods[f].wasBeingEaten) {
+        if (bellAcousticsMode && bellStrikeIntensity > 0.0f) {
+          foods[f].strike(1.0f * bellStrikeIntensity);
+        }
+        foods[f].wasBeingEaten = true;
+      }
       foods[f].isBeingEaten = true;
+    } else {
+      foods[f].wasBeingEaten = false;
     }
   }
 }
@@ -210,6 +218,7 @@ void stepBioenergetics() {
 
     // Ingestion of Food Nodules
     for (int f = 0; f < nFood; f++) {
+      if (foods[f].isDepleted) continue;
       float dx = nx - foodX[f];
       float dy = ny - foodY[f];
       if (dx * dx + dy * dy <= foodR2[f]) {
@@ -263,6 +272,7 @@ void stepBioenergetics() {
 // Inject food nodule chemoattractant cores into the trail map
 void injectFoodChemoCores() {
   for (FoodNodule fn : foodNodes) {
+    if (fn.isDepleted) continue;
     float r = fn.radius;
     float rSq = r * r;
     float strength = 4.0f * (fn.nutrients / fn.initialCapacity);
@@ -394,8 +404,13 @@ void updateFoodNodulesAndVoices() {
     fn.updateAudioParameters(adjacentMass);
 
     if (fn.nutrients <= 0.0f || fn.radius <= 2.5f) {
-      quenchDepletedNoduleCore(fn);
-      foodNodes.remove(fn);
+      if (!fn.isDepleted) {
+        fn.isDepleted = true;
+        quenchDepletedNoduleCore(fn);
+      }
+      if (!bellAcousticsMode || fn.getBellTotalEnergy() < 0.001f) {
+        foodNodes.remove(fn);
+      }
     }
   }
 }

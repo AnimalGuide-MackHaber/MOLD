@@ -170,6 +170,77 @@ public class MoldStereoSpatializationTest {
         }
         System.out.println("PASS: Slime mold biomass elevates sound vertically in 3D binaural space (elevation = " + String.format("%.2f", elevHigh) + ")");
 
+        // Test 8: Frequency-Dependent Interaural Level Difference (Spherical Head Shadow Model)
+        // Hard Left source: Left ear should have clear presence (+1.5dB) while Right ear is shadowed by skull (-9dB)
+        sketch.addFoodNodule(45.0f, 360.0f, 16.0f, 100.0f); // Hard Left
+        MoldSketch.FoodNodule fnLeft = sketch.foodNodes.get(sketch.foodNodes.size() - 1);
+        fnLeft.updateAudioParameters(0.0f);
+
+        float outIpsi = 0.0f;
+        float outContra = 0.0f;
+        for (int i = 0; i < 200; i++) {
+            float s = (float) Math.sin(2.0 * Math.PI * 3000.0 * i / 44100.0);
+            float l = fnLeft.headShadowL.process(s);
+            float r = fnLeft.headShadowR.process(s);
+            if (i > 100) {
+                outIpsi += l * l;
+                outContra += r * r;
+            }
+        }
+        double ildRatio = outIpsi / (outContra + 1e-9);
+        if (ildRatio < 3.0) {
+            throw new AssertionError("Expected head-shadow filter to create strong ILD at 3kHz (ratio >= 3.0), got " + ildRatio);
+        }
+        System.out.println("PASS: Spherical head-shadow model provides realistic 3kHz acoustic skull shadowing (Ipsi/Contra power ratio = " + String.format("%.2f", ildRatio) + ")");
+
+        // Test 9: Sub-sample ITD Delay Buffer Capacity
+        if (fnLeft.delayBufL.length != 128 || fnLeft.delayBufR.length != 128) {
+            throw new AssertionError("Expected delayBufL and delayBufR capacity of 128 samples, got " + fnLeft.delayBufL.length);
+        }
+        System.out.println("PASS: Haas delay buffers expanded to 128 samples for wide hyper-binaural delay headroom");
+
+        // Test 10: Distance Air-Absorption Filter (Atmospheric high-frequency roll-off across space)
+        // Center source (near listener) vs Corner source (far from listener)
+        sketch.addFoodNodule(360.0f, 360.0f, 16.0f, 100.0f); // Center (dist = 0)
+        sketch.addFoodNodule(45.0f, 45.0f, 16.0f, 100.0f);   // Corner (dist ~ 1.2)
+        MoldSketch.FoodNodule fnCenterDist = sketch.foodNodes.get(sketch.foodNodes.size() - 2);
+        MoldSketch.FoodNodule fnCornerDist = sketch.foodNodes.get(sketch.foodNodes.size() - 1);
+        fnCenterDist.updateAudioParameters(0.0f);
+        fnCornerDist.updateAudioParameters(0.0f);
+
+        float outCenterAir = 0.0f;
+        float outCornerAir = 0.0f;
+        for (int i = 0; i < 200; i++) {
+            float s = (float) Math.sin(2.0 * Math.PI * 6000.0 * i / 44100.0);
+            float c = fnCenterDist.airDampFilter.process(s);
+            float corn = fnCornerDist.airDampFilter.process(s);
+            if (i > 100) {
+                outCenterAir += c * c;
+                outCornerAir += corn * corn;
+            }
+        }
+        if (outCenterAir <= outCornerAir) {
+            throw new AssertionError("Expected center nodule to have higher 6kHz transmission than distant corner nodule, got center=" + outCenterAir + ", corner=" + outCornerAir);
+        }
+        System.out.println("PASS: Atmospheric distance air absorption attenuates high frequencies over distance (Center/Corner power ratio = " + String.format("%.2f", outCenterAir / outCornerAir) + ")");
+
+        // Test 11: 3D Binaural Macro Scaling (binauralDepth)
+        if (Math.abs(sketch.binauralDepth - 1.0f) > 1e-4) {
+            throw new AssertionError("binauralDepth default expected 1.0f, got " + sketch.binauralDepth);
+        }
+        sketch.binauralDepth = 2.0f; // Hyper-Binaural
+        fnLeft.updateAudioParameters(0.0f);
+        float outContra2x = 0.0f;
+        for (int i = 0; i < 200; i++) {
+            float s = (float) Math.sin(2.0 * Math.PI * 3000.0 * i / 44100.0);
+            float r = fnLeft.headShadowR.process(s);
+            if (i > 100) outContra2x += r * r;
+        }
+        if (outContra2x >= outContra) {
+            throw new AssertionError("Expected 2.0x binauralDepth to attenuate contralateral ear more than 1.0x baseline");
+        }
+        System.out.println("PASS: 3D Binaural intensity macro scales effect from natural 1.0x to hyper-binaural 2.0x");
+
         System.out.println("================================================================================");
         System.out.println(">> ALL 3D BINAURAL & STEREO SPATIALIZATION TESTS PASSED! <<");
         System.out.println("================================================================================");

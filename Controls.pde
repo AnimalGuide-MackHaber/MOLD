@@ -2,6 +2,45 @@
 // Controls.pde - UI Construction, Callbacks, and Mouse/Keyboard Input Handlers
 // =============================================================================
 
+// ---- Reusable Widget Builders ----
+
+Toggle createLedToggle(String label, boolean initial, int col, BoolCallback onToggle) {
+  return new Toggle("LED " + label + ": OFF", "LED " + label + ": ON", initial, col, v -> {
+    onToggle.on(v);
+    if (midiHandler != null) {
+      midiHandler.syncLpSideLeds();
+      midiHandler.syncMidiMixLeds();
+    }
+  });
+}
+
+Toggle createLpModeToggle(String offLbl, String onLbl, boolean initial, BoolCallback onToggle) {
+  return new Toggle(offLbl, onLbl, initial, UI_CYAN, v -> {
+    onToggle.on(v);
+    resetPadDirtyCaches();
+    if (midiHandler != null) midiHandler.syncMidiMixLeds();
+  });
+}
+
+Slider createReverbIrSlider(String label, float minV, float maxV, float step, float initVal, int decimals, String suffix, FloatCallback onVal) {
+  return new Slider(label, minV, maxV, step, initVal, decimals, suffix, v -> {
+    onVal.on(v);
+    if (!autoModulateReverb || reverbBioModDepth <= 0.001f) triggerIrRegenerationAsync();
+  });
+}
+
+void resetPadDirtyCaches() {
+  if (midiHandler != null) {
+    for (int i = 0; i < 64; i++) {
+      padDirtyStates[i] = (byte) 255;
+      padDirtyChannels[i] = -1;
+      lastSentPadR[i] = (byte) -1;
+      lastSentPadG[i] = (byte) -1;
+      lastSentPadB[i] = (byte) -1;
+    }
+  }
+}
+
 // ---- UI Section Builders ----
 
 Section buildTransportSection() {
@@ -39,27 +78,12 @@ Section buildMidiSection() {
   ledThresholdSlider = new Slider("LAUNCHPAD LED SENSITIVITY", 20.0f, 1000.0f, 10.0f, ledMassThreshold, 0, "", v -> ledMassThreshold = v);
   lpRippleWidthSlider = new Slider("RIPPLE WIDTH (LAUNCHPAD)", 1.0f, 5.0f, 0.5f, lpRippleWidth, 1, " px", v -> lpRippleWidth = v);
 
-  lpShowSlimeToggle = new Toggle("LED MOLD: OFF", "LED MOLD: ON", lpShowSlime, UI_YELLOW, v -> {
-    lpShowSlime = v;
-    if (midiHandler != null) midiHandler.syncLpSideLeds();
-  });
-  lpShowFoodToggle = new Toggle("LED FOOD: OFF", "LED FOOD: ON", lpShowFood, UI_CYAN, v -> {
-    lpShowFood = v;
-    if (midiHandler != null) midiHandler.syncLpSideLeds();
-  });
-  lpShowEatingToggle = new Toggle("LED EAT: OFF", "LED EAT: ON", lpShowEating, UI_MAGENTA, v -> {
-    lpShowEating = v;
-    if (midiHandler != null) midiHandler.syncLpSideLeds();
-  });
+  lpShowSlimeToggle = createLedToggle("MOLD", lpShowSlime, UI_YELLOW, v -> lpShowSlime = v);
+  lpShowFoodToggle = createLedToggle("FOOD", lpShowFood, UI_CYAN, v -> lpShowFood = v);
+  lpShowEatingToggle = createLedToggle("EAT", lpShowEating, UI_MAGENTA, v -> lpShowEating = v);
 
-  lpRgbModeToggle = new Toggle("LP LED: PALETTE", "LP LED: RGB GRADIENT", lpUseRgbSysex, UI_CYAN, v -> {
-    lpUseRgbSysex = v;
-    resetPadDirtyCaches();
-  });
-  lpUserModeToggle = new Toggle("LP: PROGRAMMER", "LP: USER MODE", lpUserMode, UI_CYAN, v -> {
-    lpUserMode = v;
-    resetPadDirtyCaches();
-  });
+  lpRgbModeToggle = createLpModeToggle("LP LED: PALETTE", "LP LED: RGB GRADIENT", lpUseRgbSysex, v -> lpUseRgbSysex = v);
+  lpUserModeToggle = createLpModeToggle("LP: PROGRAMMER", "LP: USER MODE", lpUserMode, v -> lpUserMode = v);
   rescanMidiBtn = new Button("Rescan MIDI Devices", UI_TEXT, () -> rescanMidi());
 
   return new Section("HARDWARE MIDI LINK (LAUNCHPAD & MIDIMIX)", true,
@@ -76,26 +100,27 @@ Section buildMidiSection() {
   );
 }
 
-void resetPadDirtyCaches() {
-  if (midiHandler != null) {
-    for (int i = 0; i < 64; i++) {
-      padDirtyStates[i] = (byte) 255;
-      padDirtyChannels[i] = -1;
-      lastSentPadR[i] = (byte) -1;
-      lastSentPadG[i] = (byte) -1;
-      lastSentPadB[i] = (byte) -1;
-    }
-  }
-}
-
 Section buildHarmonySection() {
   gridOverlayToggle = new Toggle("SHOW 8x8 FREQ OVERLAY: OFF", "SHOW 8x8 FREQ OVERLAY: ON", showGridOverlay, UI_YELLOW, v -> showGridOverlay = v);
+  bellAcousticsToggle = new Toggle("VOICE: SYNTH OSC", "VOICE: BELL ACOUSTICS", bellAcousticsMode, UI_YELLOW, v -> bellAcousticsMode = v);
+  bellQSlider = new Slider("BELL DECAY / RESONANCE (Q)", 500.0f, 5000.0f, 100.0f, bellQ, 0, "", v -> bellQ = v);
+  bellSustainSlider = new Slider("FEEDING BELL SUSTAIN", 0.2f, 2.0f, 0.1f, bellSustainLevel, 1, "x", v -> bellSustainLevel = v);
+  bellStrikeSlider = new Slider("CLAPPER STRIKE IMPACT", 0.0f, 2.0f, 0.1f, bellStrikeIntensity, 1, "x", v -> bellStrikeIntensity = v);
 
-  return new Section("HARMONIZER & SCALE MATRIX", true,
-    new Dropdown("ROOT KEY", NOTE_NAMES, keyRootIndex, i -> { keyRootIndex = i; retuneAllNodules(); }),
-    new Dropdown("CONSONANT SCALE", SCALE_NAMES, currentScaleIdx, i -> { currentScaleIdx = i; retuneAllNodules(); }),
-    new RadioGroup("OCTAVE SHIFT", OCTAVE_NAMES, octaveShiftIdx, UI_CYAN, i -> { octaveShiftIdx = i; retuneAllNodules(); }),
-    new RadioGroup("OSCILLATOR WAVEFORM", WAVE_NAMES, waveformIdx, UI_CYAN, i -> waveformIdx = i),
+  rootKeyDropdown = new Dropdown("ROOT KEY", NOTE_NAMES, keyRootIndex, i -> { keyRootIndex = i; retuneAllNodules(); });
+  scaleDropdown = new Dropdown("CONSONANT SCALE", SCALE_NAMES, currentScaleIdx, i -> { currentScaleIdx = i; retuneAllNodules(); });
+  octaveRadio = new RadioGroup("OCTAVE SHIFT", OCTAVE_NAMES, octaveShiftIdx, UI_CYAN, i -> { octaveShiftIdx = i; retuneAllNodules(); });
+  waveformRadio = new RadioGroup("SYNTH OSC WAVEFORM", WAVE_NAMES, waveformIdx, UI_CYAN, i -> waveformIdx = i);
+
+  return new Section("HARMONIZER & BELL ACOUSTICS", true,
+    rootKeyDropdown,
+    scaleDropdown,
+    octaveRadio,
+    bellAcousticsToggle,
+    bellQSlider,
+    bellSustainSlider,
+    bellStrikeSlider,
+    waveformRadio,
     gridOverlayToggle
   );
 }
@@ -104,11 +129,13 @@ Section buildFilterSection() {
   filterSensSlider = new Slider("FILTER CUTOFF SENSITIVITY", 0.2f, 3.0f, 0.1f, filterSens, 1, "x", v -> filterSens = v);
   filterQSlider = new Slider("FILTER RESONANCE (Q)", 0.5f, 18.0f, 0.5f, filterQ, 1, "", v -> filterQ = v);
   vcaSensSlider = new Slider("ADJACENT MASS VCA GAIN", 0.2f, 3.0f, 0.1f, vcaSensitivity, 1, "x", v -> vcaSensitivity = v);
+  binauralDepthSlider = new Slider("3D BINAURAL INTENSITY", 0.0f, 2.0f, 0.1f, binauralDepth, 1, "x", v -> binauralDepth = v);
 
-  return new Section("DYNAMIC LPF & ADJACENT VCA", true,
+  return new Section("DYNAMIC LPF & 3D BINAURAL", true,
     filterSensSlider,
     filterQSlider,
-    vcaSensSlider
+    vcaSensSlider,
+    binauralDepthSlider
   );
 }
 
@@ -122,18 +149,9 @@ Section buildReverbSection() {
     baseReverbDry = v;
     if (!autoModulateReverb || reverbBioModDepth <= 0.001f) reverbDry = v;
   });
-  reverbT60Slider = new Slider("DECAY TIME (T60)", 0.5f, 8.0f, 0.1f, baseReverbT60, 1, "s", v -> {
-    baseReverbT60 = v;
-    if (!autoModulateReverb || reverbBioModDepth <= 0.001f) { reverbT60 = v; triggerIrRegenerationAsync(); }
-  });
-  reverbDampSlider = new Slider("HIGH DAMPING (ALPHA)", 0.05f, 0.95f, 0.05f, baseReverbHighDamping, 2, "", v -> {
-    baseReverbHighDamping = v;
-    if (!autoModulateReverb || reverbBioModDepth <= 0.001f) { reverbHighDamping = v; triggerIrRegenerationAsync(); }
-  });
-  reverbPreSlider = new Slider("PRE-DELAY", 0.005f, 0.060f, 0.005f, baseReverbPreDelay, 3, "s", v -> {
-    baseReverbPreDelay = v;
-    if (!autoModulateReverb || reverbBioModDepth <= 0.001f) { reverbPreDelay = v; triggerIrRegenerationAsync(); }
-  });
+  reverbT60Slider = createReverbIrSlider("DECAY TIME (T60)", 0.5f, 8.0f, 0.1f, baseReverbT60, 1, "s", v -> { baseReverbT60 = v; reverbT60 = v; });
+  reverbDampSlider = createReverbIrSlider("HIGH DAMPING (ALPHA)", 0.05f, 0.95f, 0.05f, baseReverbHighDamping, 2, "", v -> { baseReverbHighDamping = v; reverbHighDamping = v; });
+  reverbPreSlider = createReverbIrSlider("PRE-DELAY", 0.005f, 0.060f, 0.005f, baseReverbPreDelay, 3, "s", v -> { baseReverbPreDelay = v; reverbPreDelay = v; });
   reverbToggle = new Toggle("REVERB: OFF", "REVERB: ON", reverbEnabled, UI_GREEN, v -> reverbEnabled = v);
   bioModToggle = new Toggle("BIO-MOD: OFF", "BIO-MOD: ON", autoModulateReverb, UI_CYAN, v -> {
     autoModulateReverb = v;
@@ -177,11 +195,14 @@ Section buildBioenergeticsSection() {
 }
 
 Section buildVisualsSection() {
+  paletteRadio = new RadioGroup("VISUAL THEME", PALETTE_NAMES, paletteIdx, UI_YELLOW, i -> paletteIdx = i);
+  gradientColorsSlider = new Slider("MASS GRADIENT COLORS", 1.0f, 8.0f, 1.0f, gradientColorCount, 0, "", v -> gradientColorCount = round(v));
   visualSharpnessSlider = new Slider("GRADIENT / SHARP (ON-OFF)", 0.0f, 1.0f, 0.01f, visualSharpness, 2, "", v -> visualSharpness = v);
   visualBlurSlider = new Slider("MOTION BLUR TRAILS", 0.0f, 8.0f, 0.1f, visualBlur, 1, "px", v -> visualBlur = v);
 
   return new Section("COLOR PALETTE & VISUALS", true,
-    new RadioGroup("VISUAL THEME", PALETTE_NAMES, paletteIdx, UI_YELLOW, i -> paletteIdx = i),
+    paletteRadio,
+    gradientColorsSlider,
     visualSharpnessSlider,
     visualBlurSlider
   );
@@ -203,8 +224,10 @@ void buildUI() {
 
 void setMidiEnabled(boolean v) {
   midiEnabled = v;
+  if (hwLinkToggle != null) hwLinkToggle.state = v;
   if (v) midiHandler.enterProgrammerMode();
   else midiHandler.exitProgrammerMode();
+  if (midiHandler != null) midiHandler.syncMidiMixLeds();
 }
 
 void rescanMidi() {
@@ -225,23 +248,23 @@ void rescanAudioDevices() {
 }
 
 void clearAllFood() {
-  // Removing nodules from the list silences their voices on the next audio buffer
   foodNodes.clear();
 }
 
-// Wipe the colony + trail field and re-seed the starting blob; food nodules are kept as-is
+// Wipe colony + trail field and re-seed central blob; food nodules kept as-is
 synchronized void reinoculate() {
   speedAccumulator = 0.0f;
   prevColonyEnergy = 0;
   for (int i = 0; i < cellBiomass.length; i++) cellBiomass[i] = 0;
   for (FoodNodule fn : foodNodes) {
     fn.grazingBuffer = 0.0f;
-    fn.isBeingEaten = false; // VCA glides to 0 until the new colony reaches it
+    fn.isBeingEaten = false;
+    fn.wasBeingEaten = false;
   }
   lastMitosisBiomassThreshold = 8000.0f;
   reverbSeed = System.nanoTime();
   triggerIrRegenerationAsync();
-  seedCentralInoculate(); // resets trailMap/nextTrailMap and spawns INITIAL_AGENTS at center
+  seedCentralInoculate();
   pendingReinoculateFboClear = true;
 }
 
@@ -258,24 +281,17 @@ void handleCanvasClick(float mx, float my) {
   }
 }
 
-// Handling mouse interaction for canvas and GUI
 void mousePressed() {
-  if (!isFullScreen) {
-    if (ui.press(mouseX, mouseY)) return;
-  }
+  if (!isFullScreen && ui.press(mouseX, mouseY)) return;
   handleCanvasClick(mouseX, mouseY);
 }
 
 void mouseDragged() {
-  if (!isFullScreen) {
-    ui.drag(mouseX, mouseY);
-  }
+  if (!isFullScreen) ui.drag(mouseX, mouseY);
 }
 
 void mouseReleased() {
-  if (!isFullScreen) {
-    ui.release();
-  }
+  if (!isFullScreen) ui.release();
 }
 
 // Keyboard shortcuts (Full-Screen toggle via F or ESC)
@@ -284,7 +300,7 @@ void keyPressed() {
     toggleFullScreen();
   } else if (key == 27) { // ESC key
     if (isFullScreen) {
-      key = 0; // Prevent sketch from abruptly terminating on ESC
+      key = 0; // Prevent termination on ESC
       toggleFullScreen();
     }
   }

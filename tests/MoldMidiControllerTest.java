@@ -43,12 +43,21 @@ public class MoldMidiControllerTest {
     }
 
     private static boolean testAkaiMidimixFullCcRangeSweep() throws Exception {
-        System.out.println("\n[MIDI Test 1] Verifying Akai MIDImix Full CC Range Sweep (All 18 controls)...");
+        System.out.println("\n[MIDI Test 1] Verifying Akai MIDImix Full CC Range Sweep (All 24 Knobs & 9 Faders)...");
         MoldSketch s = MoldTestUtils.createHeadlessSketch();
         s.midiEnabled = true;
         javax.sound.midi.Receiver r = s.midiHandler.new MidimixReceiver();
 
-        int[] ccs = {19, 23, 27, 28, 29, 30, 31, 33, 11, 16, 20, 24, 17, 21, 25, 18, 22, 26};
+        // 9 Faders: 19, 23, 27, 31, 49, 53, 57, 61, 62 (+ legacy 11, 33)
+        // 24 Knobs: Row 1 (16, 20, 24, 28, 46, 50, 54, 58)
+        //           Row 2 (17, 21, 25, 29, 47, 51, 55, 59)
+        //           Row 3 (18, 22, 26, 30, 48, 52, 56, 60)
+        int[] ccs = {
+            19, 23, 27, 31, 49, 53, 57, 61, 62, 11, 33,
+            16, 20, 24, 28, 46, 50, 54, 58,
+            17, 21, 25, 29, 47, 51, 55, 59,
+            18, 22, 26, 30, 48, 52, 56, 60
+        };
         int[] testVals = {0, 16, 64, 112, 127};
 
         for (int cc : ccs) {
@@ -79,14 +88,22 @@ public class MoldMidiControllerTest {
         MoldTestUtils.assertInRange(s.ledMassThreshold, 20.0f, 1000.0f, "ledMassThreshold");
         MoldTestUtils.assertInRange(s.reverbBioModDepth, 0.0f, 4.0f, "reverbBioModDepth");
 
-        System.out.println("  PASS: All 18 MIDImix controls swept through 0..127 with zero exceptions and correct parameter clamping.");
+        // Verify newly added controls
+        MoldTestUtils.assertInRange(s.binauralDepth, 0.0f, 2.0f, "binauralDepth");
+        MoldTestUtils.assertInRange(s.lpRippleWidth, 1.0f, 5.0f, "lpRippleWidth");
+        MoldTestUtils.assertInRange(s.waveformIdx, 0f, 3f, "waveformIdx");
+        MoldTestUtils.assertInRange(s.paletteIdx, 0f, 2f, "paletteIdx");
+        MoldTestUtils.assertInRange(s.currentScaleIdx, 0f, 5f, "currentScaleIdx");
+        MoldTestUtils.assertInRange(s.keyRootIndex, 0f, 11f, "keyRootIndex");
+
+        System.out.println("  PASS: All 24 MIDImix knobs and 9 faders swept through 0..127 with zero exceptions and correct parameter clamping.");
         return true;
     }
 
     private static boolean testAkaiMidimixButtonTogglesAndMomentaries() throws Exception {
-        System.out.println("\n[MIDI Test 2] Verifying MIDImix Button Toggles & Momentary Releases...");
+        System.out.println("\n[MIDI Test 2] Verifying MIDImix Button Toggles, Modals & Momentary Releases...");
         MoldSketch s = MoldTestUtils.createHeadlessSketch();
-        s.midiEnabled = true;
+        s.setMidiEnabled(true);
         javax.sound.midi.Receiver r = s.midiHandler.new MidimixReceiver();
 
         // 1. Mute row toggle: Note 1 (Pause)
@@ -96,7 +113,34 @@ public class MoldMidiControllerTest {
         r.send(noteOn1, -1);
         MoldTestUtils.assertTrue(s.isPaused != initPause, "Note 1 should toggle pause state");
 
-        // 2. Rec Arm row momentary action: Note 6 (Clear Food)
+        // 2. Mute row toggle: Note 19 (Hardware Link)
+        boolean initHwLink = s.midiEnabled;
+        ShortMessage noteOn19 = new ShortMessage();
+        noteOn19.setMessage(ShortMessage.NOTE_ON, 0, 19, 127);
+        r.send(noteOn19, -1);
+        MoldTestUtils.assertTrue(s.midiEnabled != initHwLink, "Note 19 should toggle hardware link state");
+        // Second press to restore link so subsequent button tests operate with link active
+        r.send(noteOn19, -1);
+        MoldTestUtils.assertTrue(s.midiEnabled == initHwLink, "Note 19 second press should restore hardware link state");
+
+        // 3. Solo row toggle: Note 2 (Slime layer)
+        boolean initSlime = s.lpShowSlime;
+        ShortMessage noteOn2 = new ShortMessage();
+        noteOn2.setMessage(ShortMessage.NOTE_ON, 0, 2, 127);
+        r.send(noteOn2, -1);
+        MoldTestUtils.assertTrue(s.lpShowSlime != initSlime, "Note 2 should toggle lpShowSlime state");
+
+        // 4. Solo row modal: Note 14 (Waveform cycle)
+        int initWave = s.waveformIdx;
+        ShortMessage noteOn14 = new ShortMessage();
+        noteOn14.setMessage(ShortMessage.NOTE_ON, 0, 14, 127);
+        r.send(noteOn14, -1);
+        MoldTestUtils.assertTrue(s.waveformIdx == (initWave + 1) % 4, "Note 14 should cycle waveformIdx");
+        if (s.waveformRadio != null) {
+            MoldTestUtils.assertTrue(s.waveformRadio.selected == s.waveformIdx, "waveformRadio widget should mirror waveformIdx");
+        }
+
+        // 5. Rec Arm row momentary action: Note 6 (Clear Food)
         s.addFoodNodule(100f, 100f, 10f, 100f);
         ShortMessage noteOn6 = new ShortMessage();
         noteOn6.setMessage(ShortMessage.NOTE_ON, 0, 6, 127);
@@ -108,7 +152,14 @@ public class MoldMidiControllerTest {
         noteOff6.setMessage(ShortMessage.NOTE_OFF, 0, 6, 0);
         r.send(noteOff6, -1);
 
-        System.out.println("  PASS: MIDImix toggles and momentary actions respond correctly to hardware events.");
+        // 6. Rec Arm row momentary action: Note 21 (Scatter 1 Food)
+        int initFoodCount = s.foodNodes.size();
+        ShortMessage noteOn21 = new ShortMessage();
+        noteOn21.setMessage(ShortMessage.NOTE_ON, 0, 21, 127);
+        r.send(noteOn21, -1);
+        MoldTestUtils.assertTrue(s.foodNodes.size() == initFoodCount + 1, "Note 21 should scatter 1 food nodule");
+
+        System.out.println("  PASS: MIDImix toggles, layer modals, and momentary actions respond correctly to hardware events.");
         return true;
     }
 

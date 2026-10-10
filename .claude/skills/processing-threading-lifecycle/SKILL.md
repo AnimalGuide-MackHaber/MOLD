@@ -35,6 +35,11 @@ Because code across `.pde` tabs is concatenated as non-static inner members of `
 ### D. Exclusive Lifecycle Methods
 Lifecycle methods (`setup()`, `draw()`, `exit()`, `keyPressed()`, `keyReleased()`, `mousePressed()`, `mouseReleased()`) must exist **strictly in the root sketch file** (e.g., `MOLD.pde`). Never duplicate lifecycle methods in auxiliary `.pde` tabs.
 
+### E. No Member Interfaces in `.pde` Inner Classes
+In Java, all member interfaces are implicitly `static` (JLS §8.5.1). Because classes defined in `.pde` tabs are non-static inner classes of `PApplet`, declaring an `interface` inside an inner class triggers:
+* **The Error**: `The member interface <Name> can only be defined inside a top-level class or interface or in a static context.`
+* **The Rule**: Declare functional callbacks and interfaces at the top-level sketch scope (outside of any class block in a `.pde` file) or in dedicated `.java` files. Reuse established sketch interfaces such as `FloatCallback` or `IntCallback` rather than nesting new interfaces inside component classes.
+
 ---
 
 ## 2. Multi-Threaded Control & OpenGL Thread Affinity
@@ -107,6 +112,7 @@ Before committing lifecycle or threading changes:
 - [ ] Is `fullScreen()` or `size()` placed only in `setup()` in the root `.pde`?
 - [ ] Are `setup()` and `draw()` declared only once across the entire project?
 - [ ] Are all static utility classes in `.java` files rather than `.pde` tabs?
+- [ ] Are all functional/member interfaces declared at top-level sketch scope or in `.java` files (never inside inner classes)?
 - [ ] Are all OpenGL commands (`beginDraw`, `endDraw`, `glClearColor`) isolated strictly to `draw()`?
 - [ ] Are asynchronous events handled using the deferred execution pattern with volatile flags?
 - [ ] Is `surface.setResizable(true)` absent from the codebase?

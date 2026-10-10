@@ -87,25 +87,41 @@ To achieve parity with native desktop Velvet Noise Reverb and 3D binaural spatia
 
 ---
 
-## 6. HTML Script Patching & Verification Safety
+## 6. Modular Architecture & Script Verification Safety
 
-When updating `<script>` blocks or JavaScript logic embedded in `index.html`:
-1. **Automated Syntax Check**:
-   Before committing, always extract the JavaScript code and run `node -c` to verify that there are no parse errors, broken template strings, or mismatched braces:
+1. **Subsystem File Decomposition**:
+   Decompose the web application across dedicated, modular files:
+   - `css/styles.css`: Visual styling, canvas crisp pixelation, and transitions.
+   - `js/config.js`: Configuration state (`CONFIG`), musical scale matrices, and Simpson bell acoustic tuning ratios.
+   - `js/audio.js`: Web Audio context lifecycle, `FoodAudioVoice` synthesizer, and algorithmic velvet noise reverb.
+   - `js/simulation.js`: `Agent` and `FoodNodule` data models, Moore neighborhood biomass evaluation.
+   - `js/midi.js`: Web MIDI endpoints, Launchpad MK3 batch SysEx RGB telemetry, and MIDImix CC bindings.
+   - `js/sketch.js`: Encapsulate the `p5.js` instance (`new p5((p) => { ... })`) handling canvas resizing, CPU trail decay, and pixel array streaming.
+   - `js/ui.js`: DOM event listeners, slider bindings, and accordion toggles.
+
+2. **Automated Syntax & Shared Global Scope Check**:
+   Before committing, verify all modular JS files with `node -c js/*.js` and run a shared-context global script evaluation (`vm.runInThisContext`) to ensure inter-module variables and functions resolve cleanly without reference errors:
    ```bash
+   node -c js/*.js
    node -e '
      const fs = require("fs");
-     const html = fs.readFileSync("index.html", "utf8");
-     const matches = html.match(/<script>([\s\S]*?)<\/script>/gi);
-     matches.forEach((tag, idx) => {
-       const code = tag.replace(/<\/?script>/gi, "");
-       try { new Function(code); }
-       catch (e) { console.error(`Syntax error in script tag ${idx}:`, e); process.exit(1); }
+     const vm = require("vm");
+     global.window = global;
+     global.document = { getElementById: () => ({ addEventListener: ()=>{}, classList: { add: ()=>{}, remove: ()=>{} }, innerText: "", value: "0" }), querySelectorAll: () => [] };
+     global.navigator = { requestMIDIAccess: false };
+     global.p5 = function(fn) { fn({ createCanvas: ()=>({ parent: ()=>{} }), pixelDensity: ()=>{}, noSmooth: ()=>{}, createImage: () => ({ pixels: new Uint8ClampedArray(256*256*4), updatePixels: ()=>{} }), color: ()=>({ levels: [0,0,0,0] }), resizeCanvas: ()=>{} }); };
+     global.ResizeObserver = class { observe(){} };
+     ["config.js", "audio.js", "simulation.js", "midi.js", "sketch.js", "ui.js"].forEach(f => {
+       vm.runInThisContext(fs.readFileSync("js/" + f, "utf8"), { filename: f });
      });
-     console.log("All inline scripts validated successfully!");
+     console.log("All modular scripts loaded and verified!");
    '
    ```
-2. **Event Listener Attachment**:
+
+3. **Root and Subdirectory Mirroring**:
+   Always mirror modifications across both `./index.html` (with `./js/` and `./css/`) and `./WebApp/index.html` (with `./WebApp/js/` and `./WebApp/css/`).
+
+4. **Event Listener Attachment**:
    Ensure all dynamically created buttons and dropdowns have explicit `addEventListener` bindings attached after creation.
 
 ---
@@ -116,5 +132,6 @@ Before committing WebApp changes:
 - [ ] Do CPU trail evaporation cutoffs match the shader scale ($0.005 \times 255 = 1.275$)?
 - [ ] Does `speedAccumulator` increment at `CONFIG.simSpeed * 0.4`?
 - [ ] Does harmonic grid math calculate `Math.floor(invertedRow / 2)` anchored at `baseOctave = 1`?
-- [ ] Has inline JavaScript syntax been verified with `node -c` or `new Function(code)`?
+- [ ] Have all modular JS files passed syntax validation (`node -c js/*.js`) and global scope load checks?
+- [ ] Are `./index.html` (root) and `./WebApp/index.html` completely in sync?
 - [ ] Does Web MIDI launch cleanly in supported browsers?

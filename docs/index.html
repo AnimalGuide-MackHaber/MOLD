@@ -225,6 +225,33 @@
               <button class="btn-wave-sel py-1 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 font-mono transition-colors" data-wave="square">SQR</button>
             </div>
           </div>
+          <div class="pt-2 border-t border-neutral-800 space-y-2">
+            <div class="flex items-center justify-between">
+              <label for="chk-bell-mode" class="text-neutral-300 font-semibold text-[11px]">Bell Mode & Harmonic Decay</label>
+              <input type="checkbox" id="chk-bell-mode" checked class="w-4 h-4 rounded bg-neutral-800 border-neutral-700">
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-neutral-400 text-[10px]">Bell Resonance / Decay (Q)</span>
+                <span id="lbl-bell-q" class="font-mono text-cyan-400 text-[10px]">1800</span>
+              </div>
+              <input id="slider-bell-q" type="range" min="500" max="5000" step="100" value="1800" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-neutral-400 text-[10px]">Feeding Bell Sustain</span>
+                <span id="lbl-bell-sustain" class="font-mono text-cyan-400 text-[10px]">1.0x</span>
+              </div>
+              <input id="slider-bell-sustain" type="range" min="0.2" max="2.0" step="0.1" value="1.0" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-neutral-400 text-[10px]">Clapper Strike Impact</span>
+                <span id="lbl-bell-strike" class="font-mono text-cyan-400 text-[10px]">1.0x</span>
+              </div>
+              <input id="slider-bell-strike" type="range" min="0.0" max="2.0" step="0.1" value="1.0" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+            </div>
+          </div>
           <div class="flex items-center justify-between pt-1">
             <label for="chk-show-overlay" class="text-neutral-400">Show 8x8 Matrix HUD</label>
             <input type="checkbox" id="chk-show-overlay" class="w-4 h-4 rounded bg-neutral-800 border-neutral-700">
@@ -382,6 +409,13 @@
           </div>
           <div class="pt-3 border-t border-neutral-800 mt-2">
             <div class="flex justify-between items-center mb-1">
+              <span class="text-neutral-400">Mass Gradient Colors</span>
+              <span id="lbl-gradient-colors" class="font-mono text-cyan-400">3</span>
+            </div>
+            <input id="slider-gradient-colors" type="range" min="1" max="8" step="1" value="3" class="w-full h-1 bg-neutral-800 rounded cursor-pointer">
+          </div>
+          <div class="pt-3 border-t border-neutral-800 mt-2">
+            <div class="flex justify-between items-center mb-1">
               <span class="text-neutral-400">Gradient / Sharp (On-Off)</span>
               <span id="lbl-sharpness" class="font-mono text-cyan-400">0.0</span>
             </div>
@@ -453,6 +487,7 @@
       reverbSeed: 1337,
       lastMitosisBiomassThreshold: 8000.0,
       visualSharpness: 0.0,
+      gradientColorCount: 3,
       lpfSens: 3.0, // Default to maximum on startup
       lpfQ: 18.0,  // Default to maximum on startup
       vcaSens: 1.0,
@@ -460,6 +495,10 @@
       rootNote: 9, // 'A'
       scaleType: 'major_pentatonic',
       waveform: 'triangle',
+      bellAcousticsMode: true,
+      bellQ: 1800.0,
+      bellSustainLevel: 1.0,
+      bellStrikeIntensity: 1.0,
       showGridOverlay: false,
       palette: 'yellow',
       ledMassThreshold: 120.0,
@@ -578,32 +617,66 @@
       }
     }
 
+    // --- Bell Acoustics Simpson Carillon Tuning Ratios & Modal Parameters ---
+    const BELL_RATIOS = [0.50, 1.00, 1.1892, 1.4983, 2.00, 2.74];
+    const BELL_STRIKE_AMPS = [0.45, 0.65, 0.75, 0.85, 1.00, 0.90];
+    const BELL_SUSTAIN_WEIGHTS = [0.60, 0.80, 0.70, 0.50, 0.35, 0.05];
+    const BELL_Q_MULTS = [1.0, 1.0, 1.0, 1.0, 0.9, 0.35];
+
     // --- STREAMING_CHUNK:Building Voice, VCA, and Filter DSP logic for Food Nodes ---
-    // Food Audio Voice: True 3D Binaural Spatialization, Pinna Spectral Notch & Head Shadow Filter
+    // Food Audio Voice: True 3D Binaural Spatialization, Pinna Spectral Notch, Head Shadow Filter & Bell Modal Synthesizer
     class FoodAudioVoice {
       constructor(food) {
         this.food = food;
-        if (!audioCtx) return;
+        this.bellAmps = new Float32Array(6);
+        this.partialOscs = [];
+        this.partialGains = [];
+        this.osc = null;
 
-        // Signal Chain:
-        // Osc -> Pinna Notch (Elevation) -> Front/Back HighShelf (Shadow) -> Dual L/R LowPass (Head Tilt) -> Dual Delays (ITD) -> Voice Gains -> Mixer Split
-        this.osc = audioCtx.createOscillator();
+        if (audioCtx) {
+          this.initAudioNodes();
+        }
+
+        if (CONFIG.bellAcousticsMode && CONFIG.bellStrikeIntensity > 0) {
+          this.strike(0.6 * CONFIG.bellStrikeIntensity);
+        }
+      }
+
+      initAudioNodes() {
+        if (!audioCtx || this.osc) return;
+
         this.pinnaNotch = audioCtx.createBiquadFilter();
         this.frontBackShelf = audioCtx.createBiquadFilter();
-
         this.filterL = audioCtx.createBiquadFilter();
         this.filterR = audioCtx.createBiquadFilter();
-
         this.delayL = audioCtx.createDelay(0.005);
         this.delayR = audioCtx.createDelay(0.005);
-
         this.gainL = audioCtx.createGain();
         this.gainR = audioCtx.createGain();
-
         this.merger = audioCtx.createChannelMerger(2);
 
-        this.osc.type = CONFIG.waveform;
-        this.osc.frequency.setValueAtTime(getCellFrequency(food.gridCol, food.gridRow), audioCtx.currentTime);
+        this.voiceSum = audioCtx.createGain();
+        this.voiceSum.gain.setValueAtTime(1.0, audioCtx.currentTime);
+
+        const baseF = getCellFrequency(this.food.gridCol, this.food.gridRow);
+        this.partialOscs = [];
+        this.partialGains = [];
+
+        for (let p = 0; p < 6; p++) {
+          const osc = audioCtx.createOscillator();
+          const g = audioCtx.createGain();
+          osc.type = (p === 1 && !CONFIG.bellAcousticsMode) ? CONFIG.waveform : 'sine';
+          osc.frequency.setValueAtTime(baseF * BELL_RATIOS[p], audioCtx.currentTime);
+          g.gain.setValueAtTime(0.0, audioCtx.currentTime);
+          osc.connect(g);
+          g.connect(this.voiceSum);
+          try { osc.start(); } catch(e) {}
+          this.partialOscs.push(osc);
+          this.partialGains.push(g);
+        }
+
+        // Backward compatibility reference for legacy properties
+        this.osc = this.partialOscs[1];
 
         // Pinna Notch (Z-Elevation): Peaking / Notch filter sweeping 6.2kHz - 9.2kHz
         this.pinnaNotch.type = 'peaking';
@@ -630,8 +703,9 @@
         this.gainL.gain.setValueAtTime(0.0, audioCtx.currentTime);
         this.gainR.gain.setValueAtTime(0.0, audioCtx.currentTime);
 
-        // Wire graph:
-        this.osc.connect(this.pinnaNotch);
+        // Signal Chain:
+        // voiceSum -> pinnaNotch -> frontBackShelf -> filterL/R -> delayL/R -> gainL/R -> merger -> master/reverb
+        this.voiceSum.connect(this.pinnaNotch);
         this.pinnaNotch.connect(this.frontBackShelf);
 
         this.frontBackShelf.connect(this.filterL);
@@ -648,11 +722,65 @@
 
         if (reverbDryGain) this.merger.connect(reverbDryGain);
         if (reverbConvolver) this.merger.connect(reverbConvolver);
+      }
 
-        try { this.osc.start(); } catch(e) {}
+      strike(velocity) {
+        if (!this.bellAmps || velocity <= 0) return;
+        for (let p = 0; p < 6; p++) {
+          const sAmp = BELL_STRIKE_AMPS[p] * velocity;
+          if (sAmp > this.bellAmps[p]) {
+            this.bellAmps[p] = sAmp;
+          }
+        }
+      }
+
+      getTotalBellEnergy() {
+        if (!this.bellAmps) return 0.0;
+        let sum = 0.0;
+        for (let p = 0; p < 6; p++) sum += this.bellAmps[p];
+        return sum;
       }
 
       update(adjacentMass, isFeeding) {
+        // Physical and spatial simulation properties (always update for visual and lifecycle parity)
+        const effectiveMass = Math.max(0.0, adjacentMass - (CONFIG.vcaGateThreshold || 120.0));
+        const drive = (effectiveMass * CONFIG.vcaSens * 1.25) / 1000.0;
+        const targetVca = (isFeeding || this.food.consumptionActivity > 0.05) ? Math.tanh(drive) : 0.0;
+        this.food.vcaGain += (targetVca - this.food.vcaGain) * 0.15;
+
+        const targetActivity = isFeeding ? 1.0 : 0.0;
+        this.food.consumptionActivity += (targetActivity - this.food.consumptionActivity) * 0.12;
+
+        const targetElev = Math.min(1.0, Math.max(0.0, adjacentMass / 800.0));
+        this.food.elevationNorm += (targetElev - this.food.elevationNorm) * 0.12;
+
+        const baseF = getCellFrequency(this.food.gridCol, this.food.gridRow);
+        const massRatio = Math.max(0.0, this.food.mass / this.food.initialMass);
+        const sustainDrive = (isFeeding && !this.food.isDepleted) ? (this.food.vcaGain * CONFIG.bellSustainLevel * (0.5 + 0.5 * massRatio)) : 0.0;
+        const dt = 1.0 / 60.0; // rAF step time
+
+        // Multi-modal bell acoustics decay & sustain calculations
+        if (this.bellAmps) {
+          for (let p = 0; p < 6; p++) {
+            const f_p = baseF * BELL_RATIOS[p];
+            if (CONFIG.bellAcousticsMode) {
+              const tau_p = Math.min(15.0, Math.max(0.05, (CONFIG.bellQ * BELL_Q_MULTS[p]) / (Math.PI * Math.max(20.0, f_p))));
+              const decayFactor = Math.exp(-dt / tau_p);
+              const targetS = BELL_SUSTAIN_WEIGHTS[p] * sustainDrive;
+              let curAmp = this.bellAmps[p];
+              let endAmp;
+              if (curAmp < targetS) {
+                endAmp = curAmp + (targetS - curAmp) * 0.18;
+              } else {
+                endAmp = targetS + (curAmp - targetS) * decayFactor;
+              }
+              if (endAmp < 0.0001) endAmp = 0.0;
+              this.bellAmps[p] = endAmp;
+            }
+          }
+        }
+
+        // Web Audio DSP processing (only when audio engine is running and nodes are created)
         if (!audioCtx || !this.osc) return;
         const now = audioCtx.currentTime;
 
@@ -678,7 +806,6 @@
         const voiceHeadroom = 0.24 / Math.sqrt(Math.max(1.0, activeCount * 0.75));
 
         // 3. Dynamic Filter Cutoff: sweeps down as food is consumed
-        const massRatio = Math.max(0.0, this.food.mass / this.food.initialMass);
         const baseCutoff = 80.0 + (massRatio * 3120.0 * (CONFIG.lpfSens / 3.0));
         const cutoffL = Math.min(18000.0, Math.max(40.0, baseCutoff * (1.0 - dx * 0.18)));
         const cutoffR = Math.min(18000.0, Math.max(40.0, baseCutoff * (1.0 + dx * 0.18)));
@@ -693,8 +820,6 @@
         this.frontBackShelf.gain.setTargetAtTime(fbGainDb, now, 0.05);
 
         // 5. 3D Biomass Elevation notch filter (6.2kHz - 9.2kHz, -4dB -> -8dB)
-        const targetElev = Math.min(1.0, Math.max(0.0, adjacentMass / 800.0));
-        this.food.elevationNorm += (targetElev - this.food.elevationNorm) * 0.12;
         const notchFreq = 6200.0 + this.food.elevationNorm * 3000.0;
         const notchDepthDb = -4.0 - this.food.elevationNorm * 4.0;
         this.pinnaNotch.frequency.setTargetAtTime(notchFreq, now, 0.05);
@@ -713,30 +838,43 @@
           this.delayR.delayTime.setTargetAtTime(0.0, now, 0.02);
         }
 
-        // 7. VCA Modulation: Moore neighborhood drive with tanh saturation
-        const effectiveMass = Math.max(0.0, adjacentMass - (CONFIG.vcaGateThreshold || 120.0));
-        const drive = (effectiveMass * CONFIG.vcaSens * 1.25) / 1000.0;
-        const targetVca = (isFeeding || this.food.consumptionActivity > 0.05) ? Math.tanh(drive) : 0.0;
-        this.food.vcaGain += (targetVca - this.food.vcaGain) * 0.15;
+        // Apply oscillator frequencies and modal gains
+        for (let p = 0; p < 6; p++) {
+          const f_p = baseF * BELL_RATIOS[p];
+          if (this.partialOscs[p]) {
+            this.partialOscs[p].frequency.setTargetAtTime(f_p, now, 0.03);
+          }
+          if (CONFIG.bellAcousticsMode) {
+            if (this.partialGains[p]) {
+              this.partialGains[p].gain.setTargetAtTime(this.bellAmps[p] * 0.35, now, 0.02);
+            }
+          } else {
+            if (this.partialGains[p]) {
+              this.partialGains[p].gain.setTargetAtTime(p === 1 ? 1.0 : 0.0, now, 0.02);
+            }
+          }
+        }
 
-        const targetActivity = isFeeding ? 1.0 : 0.0;
-        this.food.consumptionActivity += (targetActivity - this.food.consumptionActivity) * 0.12;
-
-        const voiceGainTotal = this.food.vcaGain * voiceHeadroom * distGain;
+        const voiceAmp = CONFIG.bellAcousticsMode ? 1.0 : this.food.vcaGain;
+        const voiceGainTotal = voiceAmp * voiceHeadroom * distGain;
         this.gainL.gain.setTargetAtTime(voiceGainTotal * panL, now, 0.04);
         this.gainR.gain.setTargetAtTime(voiceGainTotal * panR, now, 0.04);
       }
 
       destroy() {
-        if (!audioCtx || !this.osc) return;
+        if (!audioCtx) return;
         const now = audioCtx.currentTime;
         try {
-          this.gainL.gain.setTargetAtTime(0, now, 0.04);
-          this.gainR.gain.setTargetAtTime(0, now, 0.04);
+          if (this.gainL) this.gainL.gain.setTargetAtTime(0, now, 0.04);
+          if (this.gainR) this.gainR.gain.setTargetAtTime(0, now, 0.04);
           setTimeout(() => {
-            if (this.osc) {
-              this.osc.stop();
-              this.osc.disconnect();
+            if (this.partialOscs) {
+              for (let p = 0; p < this.partialOscs.length; p++) {
+                try {
+                  this.partialOscs[p].stop();
+                  this.partialOscs[p].disconnect();
+                } catch(e) {}
+              }
             }
           }, 60);
         } catch (e) {}
@@ -754,6 +892,8 @@
         this.gridCol = Math.floor((this.x / CONFIG.worldDim) * CONFIG.gridDim);
         this.gridRow = Math.floor((this.y / CONFIG.worldDim) * CONFIG.gridDim);
         this.isFeeding = false;
+        this.wasFeeding = false;
+        this.isDepleted = false;
         this.elevationNorm = 0.0;
         this.vcaGain = 0.0;
         this.consumptionActivity = 0.0;
@@ -763,6 +903,7 @@
 
       update(adjacentMass) {
         this.voice.update(adjacentMass, this.isFeeding);
+        if (!this.isFeeding) this.wasFeeding = false;
         this.isFeeding = false; // Reset for next frame
       }
 
@@ -932,12 +1073,19 @@
           let hitFood = false;
           for (let f = 0; f < foodSources.length; f++) {
             const food = foodSources[f];
+            if (food.isDepleted) continue;
             const dx = ag.x - food.x;
             const dy = ag.y - food.y;
             if (dx * dx + dy * dy < food.radius * food.radius) {
               hitFood = true;
               ag.energy += grazeGain;
               food.grazingBuffer += 0.015;
+              if (!food.wasFeeding) {
+                if (CONFIG.bellAcousticsMode && CONFIG.bellStrikeIntensity > 0 && food.voice) {
+                  food.voice.strike(1.0 * CONFIG.bellStrikeIntensity);
+                }
+                food.wasFeeding = true;
+              }
               food.isFeeding = true;
             }
           }
@@ -965,24 +1113,31 @@
           f.radius = Math.max(2.5, f.initialRadius * Math.pow(ratio, 0.65));
 
           if (f.mass <= 0 || f.radius <= 2.5) {
-            // Quench Depleted Nodule Attractant Core
-            const fx = Math.floor(f.x);
-            const fy = Math.floor(f.y);
-            const clearR = Math.floor(f.radius * 1.5);
-            const rSqClear = clearR * clearR;
-            for (let dy = -clearR; dy <= clearR; dy++) {
-              for (let dx = -clearR; dx <= clearR; dx++) {
-                if (dx * dx + dy * dy <= rSqClear) {
-                  const tx = ((fx + dx) % CONFIG.worldDim + CONFIG.worldDim) % CONFIG.worldDim;
-                  const ty = ((fy + dy) % CONFIG.worldDim + CONFIG.worldDim) % CONFIG.worldDim;
-                  trailMap[ty * CONFIG.worldDim + tx] *= 0.25;
+            if (!f.isDepleted) {
+              f.isDepleted = true;
+              // Quench Depleted Nodule Attractant Core
+              const fx = Math.floor(f.x);
+              const fy = Math.floor(f.y);
+              const clearR = Math.floor(f.radius * 1.5);
+              const rSqClear = clearR * clearR;
+              for (let dy = -clearR; dy <= clearR; dy++) {
+                for (let dx = -clearR; dx <= clearR; dx++) {
+                  if (dx * dx + dy * dy <= rSqClear) {
+                    const tx = ((fx + dx) % CONFIG.worldDim + CONFIG.worldDim) % CONFIG.worldDim;
+                    const ty = ((fy + dy) % CONFIG.worldDim + CONFIG.worldDim) % CONFIG.worldDim;
+                    trailMap[ty * CONFIG.worldDim + tx] *= 0.25;
+                  }
                 }
               }
             }
-            f.destroy();
-            foodSources.splice(i, 1);
-            continue;
+            if (!CONFIG.bellAcousticsMode || !f.voice || f.voice.getTotalBellEnergy() < 0.001) {
+              f.destroy();
+              foodSources.splice(i, 1);
+              continue;
+            }
           }
+
+          if (f.isDepleted) continue;
 
           // Inject attractant proportional to remaining mass
           const massRatio = f.mass / f.initialMass;
@@ -1045,6 +1200,7 @@
       p.draw = () => {
         if (isRunning) {
           speedAccumulator += CONFIG.simSpeed * 0.4; // 0.1x is baseline
+          if (speedAccumulator > 10.0) speedAccumulator = 10.0;
           while (speedAccumulator >= 1.0) {
             stepModel();
             speedAccumulator -= 1.0;
@@ -1066,13 +1222,44 @@
         pixelBuffer.loadPixels();
         const d = pixelBuffer.pixels;
         
-        let cBg, cAtrophy, cMargin, cSheet, cArtery;
+        let cBg;
+        let pal;
         if (CONFIG.palette === 'yellow') {
-          cBg = [6, 7, 10]; cAtrophy = [115, 65, 8]; cMargin = [161, 98, 7]; cSheet = [234, 179, 8]; cArtery = [254, 240, 138];
+          cBg = [6, 7, 10];
+          pal = [
+            [115, 65, 8],
+            [140, 82, 8],
+            [161, 98, 7],
+            [188, 122, 8],
+            [212, 150, 8],
+            [234, 179, 8],
+            [248, 212, 56],
+            [254, 240, 138]
+          ];
         } else if (CONFIG.palette === 'mono') {
-          cBg = [6, 7, 10]; cAtrophy = [45, 45, 52]; cMargin = [95, 95, 105]; cSheet = [175, 175, 185]; cArtery = [245, 245, 250];
+          cBg = [6, 7, 10];
+          pal = [
+            [45, 45, 52],
+            [70, 70, 78],
+            [95, 95, 105],
+            [122, 122, 132],
+            [148, 148, 158],
+            [175, 175, 185],
+            [210, 210, 218],
+            [245, 245, 250]
+          ];
         } else {
-          cBg = [6, 7, 10]; cAtrophy = [8, 30, 80]; cMargin = [6, 120, 160]; cSheet = [34, 211, 238]; cArtery = [207, 250, 254];
+          cBg = [6, 7, 10];
+          pal = [
+            [4, 52, 75],
+            [5, 85, 118],
+            [6, 120, 160],
+            [14, 152, 186],
+            [22, 182, 212],
+            [34, 211, 238],
+            [120, 232, 246],
+            [207, 250, 254]
+          ];
         }
 
         const fadeAlpha = p.map(CONFIG.visualBlur || 0, 0, 8.0, 255, 5);
@@ -1080,13 +1267,36 @@
         p.fill(cBg[0], cBg[1], cBg[2], fadeAlpha);
         p.rect(0, 0, p.width, p.height);
 
-        const cSharp = cArtery;
+        const cSharp = pal[7];
         const s = CONFIG.visualSharpness || 0;
         const moldCutoff = lerp(0.8, 0.4, s);
-        const cAtrophyActive = lerpColor(cAtrophy, cSharp, s);
-        const cMarginActive = lerpColor(cMargin, cSharp, s);
-        const cSheetActive = lerpColor(cSheet, cSharp, s);
-        const cArteryActive = cArtery;
+        let numColors = CONFIG.gradientColorCount || 3;
+        if (numColors < 1) numColors = 1;
+        if (numColors > 8) numColors = 8;
+
+        const activeBands = new Array(numColors);
+        for (let b = 0; b < numColors; b++) {
+          const palIdx = (numColors === 1) ? 7 : Math.min(7, Math.max(0, Math.floor(b * 7 / (numColors - 1) + 0.5)));
+          activeBands[b] = lerpColor(pal[palIdx], cSharp, s);
+        }
+
+        const logCutoff = Math.log(moldCutoff);
+        const logTop = Math.log(36.0);
+        const logRange = logTop - logCutoff;
+
+        const bandLut = new Int32Array(256);
+        for (let v = 0; v < 256; v++) {
+          if (v < moldCutoff) {
+            bandLut[v] = -1;
+          } else if (numColors <= 1) {
+            bandLut[v] = 0;
+          } else {
+            const u = Math.min(1.0, Math.max(0.0, (Math.log(Math.max(v, moldCutoff)) - logCutoff) / logRange));
+            let b = Math.floor(u * numColors);
+            if (b >= numColors) b = numColors - 1;
+            bandLut[v] = b;
+          }
+        }
 
         for (let i = 0; i < trailMap.length; i++) {
           const val = trailMap[i];
@@ -1094,14 +1304,12 @@
 
           if (val < moldCutoff) {
             d[px] = cBg[0]; d[px+1] = cBg[1]; d[px+2] = cBg[2]; d[px+3] = 0; // transparent for blur
-          } else if (val < 4.0) {
-            d[px] = cAtrophyActive[0]; d[px+1] = cAtrophyActive[1]; d[px+2] = cAtrophyActive[2]; d[px+3] = 255;
-          } else if (val < 10.0) {
-            d[px] = cMarginActive[0]; d[px+1] = cMarginActive[1]; d[px+2] = cMarginActive[2]; d[px+3] = 255;
-          } else if (val < 30.0) {
-            d[px] = cSheetActive[0]; d[px+1] = cSheetActive[1]; d[px+2] = cSheetActive[2]; d[px+3] = 255;
           } else {
-            d[px] = cArteryActive[0]; d[px+1] = cArteryActive[1]; d[px+2] = cArteryActive[2]; d[px+3] = 255;
+            const vInt = Math.min(255, Math.max(0, val | 0));
+            let b = bandLut[vInt];
+            if (b < 0 || b >= numColors) b = 0;
+            const c = activeBands[b] || cSharp;
+            d[px] = c[0]; d[px+1] = c[1]; d[px+2] = c[2]; d[px+3] = 255;
           }
         }
         pixelBuffer.updatePixels();
@@ -1111,10 +1319,24 @@
         for (const food of foodSources) {
           const sx = (food.x / CONFIG.worldDim) * p.width;
           const sy = (food.y / CONFIG.worldDim) * p.height;
+          const radMax = (p.width / 800) * 16;
+
+          if (food.isDepleted) {
+            const bellEnergy = food.voice ? food.voice.getTotalBellEnergy() : 0;
+            if (CONFIG.bellAcousticsMode && bellEnergy > 0.001) {
+              p.push();
+              p.noFill();
+              p.stroke(255, 255, 255, Math.min(140, bellEnergy * 120));
+              p.strokeWeight(1.0);
+              p.circle(sx, sy, radMax * 2);
+              p.pop();
+            }
+            continue;
+          }
+
           const massRatio = Math.max(0.0, food.mass / food.initialMass);
           
           // Outer original bounds (dashed)
-          const radMax = (p.width / 800) * 16;
           p.noFill();
           p.stroke(255, 200, 50, 60);
           p.strokeWeight(1);
@@ -1410,18 +1632,46 @@
       
       if (cmd === 0x90 && d2 > 0) { // Note On
         // Actions
-        if (d1 === 3) { document.getElementById('btn-seed-food').click(); }
-        else if (d1 === 6) { document.getElementById('btn-clear-food').click(); }
-        else if (d1 === 9) { document.getElementById('btn-reinoculate').click(); }
-        else if (d1 === 15) { document.getElementById('btn-regen-ir').click(); }
+        if (d1 === 3) { const b = document.getElementById('btn-seed-food'); if (b) b.click(); }
+        else if (d1 === 6) { const b = document.getElementById('btn-clear-food'); if (b) b.click(); }
+        else if (d1 === 9) { const b = document.getElementById('btn-reinoculate'); if (b) b.click(); }
+        else if (d1 === 12) { const b = document.getElementById('btn-rescan-midi'); if (b) b.click(); }
+        else if (d1 === 15) { const b = document.getElementById('btn-regen-ir'); if (b) b.click(); }
+        else if (d1 === 21) { addFoodNodule(Math.random() * (SIM_W - 80) + 40, Math.random() * (SIM_H - 80) + 40, 16, 512); }
+        else if (d1 === 24) { retuneAllNodules(); }
 
-        // Toggles
-        if (d1 === 1) { document.getElementById('btn-engine-toggle').click(); }
-        else if (d1 === 4) { document.getElementById('btn-audio-toggle').click(); }
-        else if (d1 === 7) { document.getElementById('btn-fullscreen').click(); }
-        else if (d1 === 10) { document.getElementById('chk-show-overlay').click(); }
-        else if (d1 === 13) { document.getElementById('chk-reverb-active').click(); }
-        else if (d1 === 16) { document.getElementById('chk-biomod-active').click(); }
+        // Row 1 Toggles (MUTE)
+        else if (d1 === 1) { const b = document.getElementById('btn-engine-toggle'); if (b) b.click(); }
+        else if (d1 === 4) { const b = document.getElementById('btn-audio-toggle'); if (b) b.click(); }
+        else if (d1 === 7) { const b = document.getElementById('btn-fullscreen'); if (b) b.click(); }
+        else if (d1 === 10) { const b = document.getElementById('chk-show-overlay'); if (b) b.click(); }
+        else if (d1 === 13) { const b = document.getElementById('chk-reverb-active'); if (b) b.click(); }
+        else if (d1 === 16) { const b = document.getElementById('chk-biomod-active'); if (b) b.click(); }
+        else if (d1 === 19) { const b = document.getElementById('chk-midi-active'); if (b) b.click(); }
+        else if (d1 === 22) { const b = document.getElementById('btn-lp-usermode'); if (b) b.click(); }
+
+        // Row 2 Toggles / Selectors (SOLO)
+        else if (d1 === 2) { const b = document.getElementById('btn-lp-slime'); if (b) b.click(); }
+        else if (d1 === 5) { const b = document.getElementById('btn-lp-food'); if (b) b.click(); }
+        else if (d1 === 8) { const b = document.getElementById('btn-lp-eat'); if (b) b.click(); }
+        else if (d1 === 11) { const b = document.getElementById('btn-lp-rgb'); if (b) b.click(); }
+        else if (d1 === 20) {
+          const sel = document.getElementById('sel-octave-shift');
+          if (sel) {
+            let nextVal = parseInt(sel.value, 10) + 1;
+            if (nextVal > 1) nextVal = -1;
+            sel.value = nextVal;
+            sel.dispatchEvent(new Event('change'));
+          }
+        }
+        else if (d1 === 23) {
+          const sel = document.getElementById('sel-scale-type');
+          if (sel) {
+            const nextIdx = (sel.selectedIndex + 1) % sel.options.length;
+            sel.selectedIndex = nextIdx;
+            sel.dispatchEvent(new Event('change'));
+          }
+        }
         
         // Turn on LED
         if (midiOut) {
@@ -1429,30 +1679,44 @@
         }
       } else if (cmd === 0x80 || (cmd === 0x90 && d2 === 0)) { // Note Off
         // Turn off momentary LEDs
-        if ([3, 6, 9, 12, 15].includes(d1)) {
+        if ([3, 6, 9, 12, 15, 18, 21, 24, 14, 17, 20, 23].includes(d1)) {
           if (midiOut) { try { midiOut.send([0x90, d1, 0]); } catch(e){} }
         }
       } else if (cmd === 0xB0) { // CC
         const val = d2 / 127.0;
-        if (d1 === 19) setSliderVal('slider-lpf-sens', 0.2, 3.0, val);
-        else if (d1 === 23) setSliderVal('slider-lpf-q', 0.5, 18.0, val);
-        else if (d1 === 27) setSliderVal('slider-vca-sens', 0.2, 3.0, val);
-        else if (d1 === 28) setSliderVal('slider-rev-wet', 0.0, 1.0, val);
-        else if (d1 === 29) setSliderVal('slider-rev-dry', 0.0, 1.0, val);
-        else if (d1 === 30) setSliderVal('slider-rev-t60', 0.5, 8.0, val);
-        else if (d1 === 31) setSliderVal('slider-rev-damp', 0.05, 0.95, val);
-        else if (d1 === 33) setSliderVal('slider-rev-pre', 0.005, 0.060, val);
+        // Faders (1-8 + Master)
+        if (d1 === 19 || d1 === 50) setSliderVal('slider-lpf-sens', 0.2, 3.0, val);
+        else if (d1 === 23 || d1 === 51) setSliderVal('slider-lpf-q', 0.5, 18.0, val);
+        else if (d1 === 27 || d1 === 52) setSliderVal('slider-vca-sens', 0.2, 3.0, val);
+        else if (d1 === 31 || d1 === 54 || d1 === 28) setSliderVal('slider-rev-wet', 0.0, 1.0, val);
+        else if (d1 === 49 || d1 === 55 || d1 === 29) setSliderVal('slider-rev-dry', 0.0, 1.0, val);
+        else if (d1 === 53 || d1 === 56 || d1 === 30) setSliderVal('slider-rev-t60', 0.5, 8.0, val);
+        else if (d1 === 57 || d1 === 58) setSliderVal('slider-rev-damp', 0.05, 0.95, val);
+        else if (d1 === 61 || d1 === 59 || d1 === 33) setSliderVal('slider-rev-pre', 0.005, 0.060, val);
+        else if (d1 === 62 || d1 === 60 || d1 === 11) setSliderVal('slider-speed', 0.1, 30.0, val);
         
-        else if (d1 === 11) setSliderVal('slider-speed', 0.1, 30.0, val);
-        
+        // Row 1 Knobs
         else if (d1 === 16) setSliderVal('slider-sensor-dist', 6, 160, val);
         else if (d1 === 20) setSliderVal('slider-bmr', 0.001, 0.050, val);
         else if (d1 === 24) setSliderVal('slider-loco', 0.002, 0.080, val);
         
+        // Row 2 Knobs
         else if (d1 === 17) setSliderVal('slider-sharpness', 0.0, 1.0, val);
         else if (d1 === 21) setSliderVal('slider-agents', 1000, 64000, val);
         else if (d1 === 25) setSliderVal('slider-visual-blur', 0.0, 8.0, val);
+        else if (d1 === 29) setSliderVal('slider-ripple-width', 1.0, 5.0, val);
+        else if (d1 === 47) {
+          const sel = document.getElementById('sel-scale-type');
+          if (sel) {
+            const idx = Math.min(sel.options.length - 1, Math.round(val * (sel.options.length - 1)));
+            if (sel.selectedIndex !== idx) {
+              sel.selectedIndex = idx;
+              sel.dispatchEvent(new Event('change'));
+            }
+          }
+        }
 
+        // Row 3 Knobs
         else if (d1 === 18) {
           const octIdx = Math.round(val * 2.0) - 1; // -1, 0, +1
           const sel = document.getElementById('sel-octave-shift');
@@ -1463,6 +1727,16 @@
         }
         else if (d1 === 22) setSliderVal('slider-led-thresh', 20.0, 1000.0, val);
         else if (d1 === 26) setSliderVal('slider-biomod-depth', 0.0, 4.0, val);
+        else if (d1 === 48) {
+          const sel = document.getElementById('sel-root-note');
+          if (sel) {
+            const idx = Math.min(sel.options.length - 1, Math.round(val * (sel.options.length - 1)));
+            if (sel.selectedIndex !== idx) {
+              sel.selectedIndex = idx;
+              sel.dispatchEvent(new Event('change'));
+            }
+          }
+        }
       }
     }
 
@@ -1984,13 +2258,30 @@
         btn.className = 'py-2 rounded bg-emerald-900/50 hover:bg-emerald-800/70 text-emerald-300 font-semibold border border-emerald-700/60 transition-colors';
         // Revive voices for existing food
         foodSources.forEach(f => {
-          if (!f.voice || !f.voice.osc) f.voice = new FoodAudioVoice(f);
+          if (!f.voice) {
+            f.voice = new FoodAudioVoice(f);
+          } else if (!f.voice.osc) {
+            f.voice.initAudioNodes();
+          }
         });
       } else {
         btn.innerText = 'Audio: OFF';
         btn.className = 'py-2 rounded bg-amber-900/40 hover:bg-amber-800/60 text-amber-300 font-semibold border border-amber-700/50 transition-colors';
         masterGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.05);
       }
+    }
+
+    function retuneAllNodules() {
+      foodSources.forEach(f => {
+        if (f.voice && f.voice.osc && audioCtx) {
+          const baseF = getCellFrequency(f.gridCol, f.gridRow);
+          for (let p = 0; p < 6; p++) {
+            if (f.voice.partialOscs && f.voice.partialOscs[p]) {
+              f.voice.partialOscs[p].frequency.setTargetAtTime(baseF * BELL_RATIOS[p], audioCtx.currentTime, 0.05);
+            }
+          }
+        }
+      });
     }
 
     document.getElementById('btn-audio-toggle').addEventListener('click', toggleAudioEngine);
@@ -2160,6 +2451,16 @@
       else initializeWebMidi();
     });
 
+    const sliderGradientColors = document.getElementById('slider-gradient-colors');
+    if (sliderGradientColors) {
+      sliderGradientColors.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        CONFIG.gradientColorCount = val;
+        const lbl = document.getElementById('lbl-gradient-colors');
+        if (lbl) lbl.innerText = val;
+      });
+    }
+
     document.getElementById('slider-sharpness').addEventListener('input', (e) => {
       CONFIG.visualSharpness = parseFloat(e.target.value);
       document.getElementById('lbl-sharpness').innerText = CONFIG.visualSharpness.toFixed(2);
@@ -2229,6 +2530,25 @@
           if (f.voice.osc) f.voice.osc.type = CONFIG.waveform;
         });
       });
+    });
+
+    document.getElementById('chk-bell-mode').addEventListener('change', (e) => {
+      CONFIG.bellAcousticsMode = e.target.checked;
+    });
+
+    document.getElementById('slider-bell-q').addEventListener('input', (e) => {
+      CONFIG.bellQ = parseFloat(e.target.value);
+      document.getElementById('lbl-bell-q').innerText = Math.round(CONFIG.bellQ);
+    });
+
+    document.getElementById('slider-bell-sustain').addEventListener('input', (e) => {
+      CONFIG.bellSustainLevel = parseFloat(e.target.value);
+      document.getElementById('lbl-bell-sustain').innerText = `${CONFIG.bellSustainLevel.toFixed(1)}x`;
+    });
+
+    document.getElementById('slider-bell-strike').addEventListener('input', (e) => {
+      CONFIG.bellStrikeIntensity = parseFloat(e.target.value);
+      document.getElementById('lbl-bell-strike').innerText = `${CONFIG.bellStrikeIntensity.toFixed(1)}x`;
     });
 
     document.getElementById('chk-show-overlay').addEventListener('change', (e) => {

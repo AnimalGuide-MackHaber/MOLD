@@ -133,10 +133,27 @@ In *Physarum* models, agents steer by sampling chemical concentrations ahead of 
 
 ---
 
-## 5. Verification Checklist
+## 5. Entity Lifecycle & Audio-Visual Decoupling
+
+In audio-visual simulations where entities (e.g., food nodules, oscillators) have extended acoustic decays (ringing bell modes, reverb tails, release envelopes):
+1. **Lifecycle Decoupling**:
+   - The entity may remain in the active entity list (`foodNodes`) so the audio thread can finish processing decay tails.
+   - The visual rendering pipeline (`drawSingleFoodNodule`) must immediately return early if `entity.isDepleted`:
+     ```java
+     if (fn.isDepleted) {
+       return; // Immediately omit visual geometry; do not draw ghost rings
+     }
+     ```
+2. **Preventing Ghost Guide Outlines**:
+   - Avoid rendering fixed initial-capacity bounding rings (`rMax`). Render only dynamic active physical state (`rCur`, pulse, elevation).
+
+---
+
+## 6. Verification Checklist
 
 Before committing simulation changes:
 - [ ] Are simulation buffers allocated on CPU (`float[]`) rather than ping-pong `PGraphics`?
 - [ ] Is GLSL texture feeding handled via `PImage.createImage` + `updatePixels()`?
 - [ ] Are all coordinate evaluations protected with toroidal or clamped modulo wrapping?
+- [ ] Are depleted entities immediately omitted from visual rendering to prevent ghost rings during audio decay tails?
 - [ ] Has `./tests/run_tests.sh` passed `MoldSimulationInvariantsTest`?

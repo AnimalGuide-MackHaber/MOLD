@@ -13,6 +13,7 @@ void renderCrispPixels() {
 
   renderShader.set("visualSharpness", visualSharpness);
   renderShader.set("paletteIdx", paletteIdx);
+  renderShader.set("gradientColorCount", gradientColorCount);
   
   renderFBO.beginDraw();
   renderFBO.clear();
@@ -72,29 +73,43 @@ void drawGridOverlay(float ox, float oy, float w, float h) {
     }
   }
 
-  // Draw 3D Binaural Virtual Listener (positioned at grid center)
+  // Draw 3D Binaural Virtual Listener (seated in center chair facing grid north)
   float lx = ox + w * 0.5f;
   float ly = oy + h * 0.5f;
   pushStyle();
+  // Virtual Chair Base & Backrest behind listener
+  noFill();
+  stroke(UI_BORDER, 140);
+  strokeWeight(1.2f);
+  rect(lx - 14, ly - 10, 28, 24, 4); // Chair seat cushion outline
+  line(lx - 12, ly + 14, lx + 12, ly + 14); // Backrest
+
+  // Left & Right Ear Binaural Reception Arcs (scaled by binauralDepth)
+  float earArcR = 10.0f + 5.0f * constrain(binauralDepth, 0.0f, 2.0f);
+  stroke(UI_CYAN, 70 + (int)(55 * constrain(binauralDepth, 0.0f, 2.0f)));
+  strokeWeight(1.0f);
+  arc(lx - 8, ly, earArcR * 2, earArcR * 2, HALF_PI + 0.3f, PI + HALF_PI - 0.3f);
+  arc(lx + 8, ly, earArcR * 2, earArcR * 2, -HALF_PI + 0.3f, HALF_PI - 0.3f);
+
   // Listener Head
   noFill();
-  stroke(UI_CYAN, 180);
+  stroke(UI_CYAN, 200);
   strokeWeight(1.5f);
   ellipse(lx, ly, 16, 16);
-  // Nose pointing forward (upward towards rows 0-3)
-  fill(UI_CYAN, 200);
+  // Nose pointing forward (upward towards rows 0-3 / North)
+  fill(UI_CYAN, 230);
   noStroke();
-  triangle(lx - 3, ly - 7, lx + 3, ly - 7, lx, ly - 12);
+  triangle(lx - 3, ly - 7, lx + 3, ly - 7, lx, ly - 13);
   // Left and Right Ears
-  stroke(UI_CYAN, 220);
+  stroke(UI_CYAN, 240);
   strokeWeight(2);
   line(lx - 9, ly - 3, lx - 9, ly + 3);
   line(lx + 9, ly - 3, lx + 9, ly + 3);
   // Subtle orientation label
   textAlign(CENTER, TOP);
   textSize(8);
-  fill(UI_CYAN, 160);
-  text("LISTENER (3D)", lx, ly + 11);
+  fill(UI_CYAN, 170);
+  text("LISTENER (3D SEAT)", lx, ly + 16);
   popStyle();
 }
 
@@ -108,6 +123,10 @@ void drawSingleFoodNodule(FoodNodule fn, float scaleX, float scaleY, float ox, f
   // Calculate ratio of food left
   float ratio = constrain(fn.nutrients / fn.initialCapacity, 0.0f, 1.0f);
   int pct = max(0, round(ratio * 100));
+
+  if (fn.isDepleted) {
+    return;
+  }
 
   // Zorn palette colors
   color cYellow = color(234, 179, 8); // Yellow Ochre
@@ -131,11 +150,6 @@ void drawSingleFoodNodule(FoodNodule fn, float scaleX, float scaleY, float ox, f
     popStyle();
   }
 
-  noFill();
-  stroke(90, 90, 100);
-  strokeWeight(1);
-  ellipse(cx, cy, rMax * 2, rMax * 2);
-
   if (fn.consumptionActivity > 0.01f) {
     stroke(cConsumed, 160 * fn.consumptionActivity);
     strokeWeight(2);
@@ -149,13 +163,9 @@ void drawSingleFoodNodule(FoodNodule fn, float scaleX, float scaleY, float ox, f
   ellipse(cx, cy, rCur * 2, rCur * 2);
 
   textAlign(CENTER, BOTTOM);
-  textSize(9);
-  fill(255, 255, 255, 220);
-  text(fn.label + " (" + fn.hz + "Hz)", cx, cy - rCur - 6);
-  
-  fill(lerpColor(cYellow, cRed, ratio));
   textSize(8);
-  text(pct + "% (" + round(fn.nutrients) + "u)", cx, cy - rCur + 3);
+  fill(lerpColor(cYellow, cRed, ratio));
+  text(pct + "% (" + round(fn.nutrients) + "u)", cx, cy - rCur - 3);
 
   fn.isBeingEaten = false;
 }

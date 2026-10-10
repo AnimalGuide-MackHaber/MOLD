@@ -203,6 +203,14 @@ class RadioGroup extends Widget {
     }
     return true;
   }
+
+  void setIndex(int idx, boolean notify) {
+    idx = constrain(idx, 0, options.length - 1);
+    if (idx != selected) {
+      selected = idx;
+      if (notify && cb != null) cb.on(selected);
+    }
+  }
 }
 
 /* STREAMING_CHUNK:Dropdown selector with floating overlay list */
@@ -222,6 +230,14 @@ class Dropdown extends Widget {
   void setOptions(String[] opts, int sel) {
     options = (opts == null || opts.length == 0) ? new String[]{"(none)"} : opts;
     selected = constrain(sel, 0, options.length - 1);
+  }
+
+  void setIndex(int idx, boolean notify) {
+    idx = constrain(idx, 0, options.length - 1);
+    if (idx != selected) {
+      selected = idx;
+      if (notify && cb != null) cb.on(selected);
+    }
   }
 
   float boxY() { return y + 15; }

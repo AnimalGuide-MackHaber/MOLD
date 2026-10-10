@@ -1,0 +1,39 @@
+body {
+      background-color: #090a0f;
+      color: #d1d5db;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      touch-action: manipulation;
+      margin: 0;
+      overflow: hidden; /* Prevent body scroll, handle in flex containers */
+    }
+    /* Crisp rendering for the simulation pixel array */
+    canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    input[type=range] {
+      accent-color: #06b6d4;
+    }
+    .accordion-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.25s cubic-bezier(0, 1, 0, 1);
+    }
+    .accordion-content.expanded {
+      max-height: 1200px;
+      transition: max-height 0.35s ease-in-out;
+    }
+    /* Custom scrollbar for drawer */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #111111; 
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #333333; 
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #555; 
+    }
